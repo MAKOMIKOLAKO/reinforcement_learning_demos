@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pendulum &middot; PPO &middot; RL Demos</title>
+  <meta name="description" content="A PPO agent swinging up and balancing a continuous-control inverted pendulum, running entirely in the browser." />
+  <link rel="stylesheet" href="../shared/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <span class="brand">RL Demos</span>
+      <nav>
+        <a href="../index.html">&larr; All demos</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Pendulum &middot; PPO (actor-critic)</h1>
+      <p>
+        A Proximal Policy Optimization agent controlling a frictionless
+        inverted pendulum. The network outputs a continuous torque, applied
+        every physics step to swing the pendulum up and hold it balanced.
+        Scrub the training-progress slider to compare an untrained
+        (random-torque) checkpoint against the fully trained policy.
+      </p>
+
+      <div class="demo-layout">
+        <div class="stage">
+          <canvas id="stage-canvas" width="480" height="480"></canvas>
+
+          <div class="controls">
+            <button id="play-pause-btn" class="primary" type="button">Pause</button>
+            <button id="step-btn" type="button">Step</button>
+            <button id="restart-btn" type="button">Restart</button>
+            <span id="checkpoint-badge" class="badge">loading&hellip;</span>
+          </div>
+
+          <div class="slider-row">
+            <label for="progress-slider">Training progress</label>
+            <input id="progress-slider" type="range" min="0" max="6" step="1" value="6" />
+            <output id="progress-output">100%</output>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Episode</h2>
+          <div class="stat-row">
+            <span>Step</span>
+            <span id="stat-step" class="value">0 / 200</span>
+          </div>
+          <div class="stat-row">
+            <span>Angle (0 = upright)</span>
+            <span id="stat-angle" class="value">0.00 rad</span>
+          </div>
+          <div class="stat-row">
+            <span>Angular velocity</span>
+            <span id="stat-speed" class="value">0.00 rad/s</span>
+          </div>
+          <div class="stat-row">
+            <span>Applied torque</span>
+            <span id="stat-torque" class="value">0.00 N&middot;m</span>
+          </div>
+
+          <h3>How this differs from CartPole</h3>
+          <p>
+            PPO learns two things at once: a <strong>policy</strong> (the
+            actor, which picks the torque you see applied here) and a
+            <strong>value function</strong> (the critic, which estimates how
+            good a state is). Only the actor is exported to these
+            checkpoints &mdash; the critic never runs at inference time, here
+            or in the real world.
+          </p>
+          <p>
+            What the critic buys you is training stability: it gives PPO a
+            low-variance baseline to judge actions against, whereas
+            REINFORCE (the CartPole demo on this site) learns from raw
+            episode returns alone. In practice that means this checkpoint
+            slider should sweep from flailing to competent
+            swing-up-and-balance more smoothly and consistently than
+            CartPole's REINFORCE progression, which tends to be noisier
+            checkpoint-to-checkpoint.
+          </p>
+
+          <h3>Physics</h3>
+          <p>
+            Reimplements Gym's Pendulum-v1 exactly: gravity 10.0, mass 1.0,
+            length 1.0, 0.05s timestep, torque clipped to &plusmn;2.0 N&middot;m,
+            angular velocity clipped to &plusmn;8.0 rad/s. Episodes run 200
+            steps and then auto-restart from a random initial angle and
+            angular velocity, matching Gym's reset distribution.
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>Training happens offline; this page only runs the actor network's forward pass on your device.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="pendulum.js"></script>
+</body>
+</html>
