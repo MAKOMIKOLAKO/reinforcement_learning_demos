@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CartPole &middot; REINFORCE &middot; RL Demos</title>
+  <meta name="description" content="A REINFORCE agent balances CartPole live in your browser, sampling actions from a learned stochastic policy." />
+  <link rel="stylesheet" href="../shared/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <span class="brand">RL Demos</span>
+      <nav>
+        <a href="../index.html">Home</a>
+        <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>CartPole &middot; REINFORCE</h1>
+      <p>
+        A REINFORCE agent learns a stochastic policy directly from
+        full-episode returns &mdash; no value function, no critic. Every
+        step it samples an action from a two-way probability distribution
+        output by a small neural net; it never just picks the "best" move.
+        Scrub the slider below to watch the policy go from random flailing
+        to a steady balance as training progresses.
+      </p>
+
+      <div class="demo-layout">
+        <div class="stage">
+          <canvas id="stage-canvas" width="640" height="360"></canvas>
+
+          <div class="controls">
+            <button id="btn-play" class="primary" type="button">Pause</button>
+            <button id="btn-step" type="button">Step</button>
+            <button id="btn-restart" type="button">Restart</button>
+            <span id="status-badge" class="badge">loading&hellip;</span>
+          </div>
+
+          <div class="slider-row">
+            <label for="checkpoint-slider">Training progress</label>
+            <input type="range" id="checkpoint-slider" min="0" max="0" step="1" value="0" />
+            <output id="checkpoint-output">0%</output>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <h2>REINFORCE vs. PPO</h2>
+          <p>
+            REINFORCE (this demo) updates its policy from the total return
+            of a whole episode, with no learned value function to reduce
+            variance &mdash; so training tends to look noisier and less
+            stable, and progress across checkpoints can be uneven. The
+            Pendulum demo on this site uses PPO, an actor-critic method
+            that also learns a value function (a "critic") to judge
+            states, giving it a steadier, lower-variance training signal
+            and much smoother improvement across checkpoints.
+          </p>
+
+          <h3>Episode stats</h3>
+          <div class="stat-row">
+            <span>Checkpoint</span>
+            <span class="value" id="stat-checkpoint">&mdash;</span>
+          </div>
+          <div class="stat-row">
+            <span>Episode</span>
+            <span class="value" id="stat-episode">0</span>
+          </div>
+          <div class="stat-row">
+            <span>Step</span>
+            <span class="value" id="stat-step">0</span>
+          </div>
+          <div class="stat-row">
+            <span>Cart position</span>
+            <span class="value" id="stat-x">0.000</span>
+          </div>
+          <div class="stat-row">
+            <span>Pole angle</span>
+            <span class="value" id="stat-theta">0.00&deg;</span>
+          </div>
+          <div class="stat-row">
+            <span>P(push right)</span>
+            <span class="value" id="stat-prob">&mdash;</span>
+          </div>
+
+          <h3>Avg. episode length by checkpoint</h3>
+          <p style="margin-top: -0.4rem;">
+            Computed live: each checkpoint's policy is rolled out a few
+            times (capped at 500 steps) and the episode lengths are
+            averaged, right here in your browser.
+          </p>
+          <canvas id="chart-canvas" width="280" height="120"></canvas>
+        </aside>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>Training happens offline; this page only runs forward passes on exported checkpoints.</p>
+    </footer>
+  </div>
+
+  <script type="module">
+    import { loadCheckpoint, predict } from "../shared/inference.js";
+
+    // ------------------------------------------------------------------
+    // Gym CartPole-v1 physics constants (classic control cartpole.py)
+    // ------------------------------------------------------------------
+    const GRAVITY = 9.8;
+    const MASSCART = 1.0;
+    const MASSPOLE = 0.1;
+    const TOTAL_MASS = MASSCART + MASSPOLE;
+    const LENGTH = 0.5; // half the pole's length
+    const POLEMASS_LENGTH = MASSPOLE * LENGTH;
+    const FORCE_MAG = 10.0;
+    const TAU = 0.02;
+    const THETA_THRESHOLD_RADIANS = (12 * 2 * Math.PI) / 360; // 0.2095...
+    const X_THRESHOLD = 2.4;
+    const MAX_STEPS = 500;
+
+    /**
+     * One semi-implicit Euler physics step, matching Gym's CartPoleEnv.step()
+     * exactly (action 1 => push right / +force, action 0 => push left / -force).
+     */
+    function physicsStep(state, action) {
+      let [x, xDot, theta, thetaDot] = state;
+      const force = action === 1 ? FORCE_MAG : -FORCE_MAG;
+      const costheta = Math.cos(theta);
+      const sintheta = Math.sin(theta);
+
+      const temp =
+        (force + POLEMASS_LENGTH * thetaDot * thetaDot * sintheta) / TOTAL_MASS;
+      const thetaAcc =
+        (GRAVITY * sintheta - costheta * temp) /
+        (LENGTH * (4.0 / 3.0 - (MASSPOLE * costheta * costheta) / TOTAL_MASS));
+      const xAcc = temp - (POLEMASS_LENGTH * thetaAcc * costheta) / TOTAL_MASS;
+
+      // Euler integration (Gym's default kinematics_integrator = "euler")
+      x = x + TAU * xDot;
+      xDot = xDot + TAU * xAcc;
+      theta = theta + TAU * thetaDot;
+      thetaDot = thetaDot + TAU * thetaAcc;
+
+      return [x, xDot, theta, thetaDot];
+    }
+
+    function isTerminated(state) {
+      const [x, , theta] = state;
+      return x < -X_THRESHOLD || x > X_THRESHOLD ||
+        theta < -THETA_THRESHOLD_RADIANS || theta > THETA_THRESHOLD_RADIANS;
+    }
+
+    function resetState(rng = Math.random) {
+      return [
+        (rng() - 0.5) * 0.1, // uniform(-0.05, 0.05)
+        (rng() - 0.5) * 0.1,
+        (rng() - 0.5) * 0.1,
+        (rng() - 0.5) * 0.1,
+      ];
+    }
+
+    /** Samples an action index from a probability distribution [p0, p1]. */
+    function sampleAction(probs) {
+      const r = Math.random();
+      let cumulative = 0;
+      for (let i = 0; i < probs.length; i++) {
+        cumulative += probs[i];
+        if (r < cumulative) return i;
+      }
+      return probs.length - 1; // fallback for floating-point rounding
+    }
+
+    // ------------------------------------------------------------------
+    // Rollout state
+    // ------------------------------------------------------------------
+    let checkpoint = null;
+    let state = resetState();
+    let stepCount = 0;
+    let episodeCount = 1;
+    let lastProbs = [0.5, 0.5];
+    let playing = true;
+
+    const canvas = document.getElementById("stage-canvas");
+    const ctx = canvas.getContext("2d");
+
+    function render() {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Track spans the full X_THRESHOLD range, centered horizontally.
+      const groundY = h * 0.72;
+      const pxPerUnit = (w * 0.42) / X_THRESHOLD;
+      const originX = w / 2;
+
+      // Track line
+      ctx.strokeStyle = "#4a4a55";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, groundY);
+      ctx.lineTo(w, groundY);
+      ctx.stroke();
+
+      const [x, , theta] = state;
+      const cartX = originX + x * pxPerUnit;
+      const cartW = 60;
+      const cartH = 34;
+
+      // Cart
+      ctx.fillStyle = "#6d93ff";
+      ctx.fillRect(cartX - cartW / 2, groundY - cartH / 2, cartW, cartH);
+
+      // Wheels
+      ctx.fillStyle = "#2a2a32";
+      ctx.beginPath();
+      ctx.arc(cartX - cartW / 4, groundY + cartH / 2, 5, 0, Math.PI * 2);
+      ctx.arc(cartX + cartW / 4, groundY + cartH / 2, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pole: pivots at the top-center of the cart. theta=0 is upright;
+      // positive theta tips the pole toward +x (Gym convention).
+      const pivotX = cartX;
+      const pivotY = groundY - cartH / 2;
+      const poleLenPx = LENGTH * 2 * pxPerUnit; // full pole length in px
+      const tipX = pivotX + Math.sin(theta) * poleLenPx;
+      const tipY = pivotY - Math.cos(theta) * poleLenPx;
+
+      ctx.strokeStyle = "#f2685f";
+      ctx.lineWidth = 6;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(pivotX, pivotY);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+
+      // Pivot dot
+      ctx.fillStyle = "#eaeaef";
+      ctx.beginPath();
+      ctx.arc(pivotX, pivotY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Boundary markers at +/- X_THRESHOLD
+      ctx.strokeStyle = "#f2685f";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      [-X_THRESHOLD, X_THRESHOLD].forEach((edge) => {
+        const edgeX = originX + edge * pxPerUnit;
+        ctx.beginPath();
+        ctx.moveTo(edgeX, groundY - 60);
+        ctx.lineTo(edgeX, groundY + 20);
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+    }
+
+    function updateStats() {
+      document.getElementById("stat-episode").textContent = String(episodeCount);
+      document.getElementById("stat-step").textContent = String(stepCount);
+      document.getElementById("stat-x").textContent = state[0].toFixed(3);
+      document.getElementById("stat-theta").textContent =
+        ((state[2] * 180) / Math.PI).toFixed(2) + "°";
+      document.getElementById("stat-prob").textContent =
+        lastProbs[1] !== undefined ? lastProbs[1].toFixed(3) : "—";
+    }
+
+    function tick() {
+      if (!checkpoint) return;
+      if (stepCount >= MAX_STEPS || isTerminated(state)) {
+        state = resetState();
+        stepCount = 0;
+        episodeCount += 1;
+      }
+      const probs = predict(checkpoint, state);
+      lastProbs = probs;
+      const action = sampleAction(probs);
+      state = physicsStep(state, action);
+      stepCount += 1;
+      render();
+      updateStats();
+    }
+
+    // ------------------------------------------------------------------
+    // Playback controls
+    // ------------------------------------------------------------------
+    let rafHandle = null;
+    let lastFrameTime = 0;
+    const FRAME_INTERVAL_MS = 1000 / 50; // one physics step per tau (20ms)
+
+    function loop(timestamp) {
+      if (!playing) return;
+      if (timestamp - lastFrameTime >= FRAME_INTERVAL_MS) {
+        lastFrameTime = timestamp;
+        tick();
+      }
+      rafHandle = requestAnimationFrame(loop);
+    }
+
+    function play() {
+      if (playing) return;
+      playing = true;
+      document.getElementById("btn-play").textContent = "Pause";
+      rafHandle = requestAnimationFrame(loop);
+    }
+
+    function pause() {
+      playing = false;
+      document.getElementById("btn-play").textContent = "Play";
+      if (rafHandle) cancelAnimationFrame(rafHandle);
+    }
+
+    document.getElementById("btn-play").addEventListener("click", () => {
+      if (playing) pause();
+      else play();
+    });
+
+    document.getElementById("btn-step").addEventListener("click", () => {
+      pause();
+      tick();
+    });
+
+    document.getElementById("btn-restart").addEventListener("click", () => {
+      state = resetState();
+      stepCount = 0;
+      episodeCount = 1;
+      render();
+      updateStats();
+    });
+
+    // ------------------------------------------------------------------
+    // Checkpoint loading + training-progress slider
+    // ------------------------------------------------------------------
+    let checkpointPcts = [0];
+
+    async function loadCheckpointByPct(pct) {
+      const badge = document.getElementById("status-badge");
+      badge.textContent = "loading…";
+      badge.classList.remove("error");
+      try {
+        const path = `../public/checkpoints/cartpole/reinforce/checkpoint_${String(pct).padStart(3, "0")}.json`;
+        checkpoint = await loadCheckpoint(path);
+        badge.textContent = "loaded";
+        document.getElementById("stat-checkpoint").textContent = pct + "%";
+        document.getElementById("checkpoint-output").textContent = pct + "%";
+        state = resetState();
+        stepCount = 0;
+        episodeCount = 1;
+        render();
+        updateStats();
+      } catch (err) {
+        badge.textContent = "error";
+        badge.classList.add("error");
+        console.error(err);
+      }
+    }
+
+    async function init() {
+      const manifest = await fetch("../public/checkpoints/cartpole/reinforce/manifest.json").then((r) => r.json());
+      checkpointPcts = manifest.checkpoints;
+
+      const slider = document.getElementById("checkpoint-slider");
+      slider.min = "0";
+      slider.max = String(checkpointPcts.length - 1);
+      slider.value = String(checkpointPcts.length - 1);
+
+      slider.addEventListener("input", () => {
+        const pct = checkpointPcts[Number(slider.value)];
+        loadCheckpointByPct(pct);
+      });
+
+      await loadCheckpointByPct(checkpointPcts[checkpointPcts.length - 1]);
+      render();
+      updateStats();
+      play();
+      buildChart();
+    }
+
+    // ------------------------------------------------------------------
+    // Optional: mini chart of avg. episode length by checkpoint,
+    // computed via a handful of headless rollouts per checkpoint.
+    // ------------------------------------------------------------------
+    function rolloutEpisodeLength(cp) {
+      let s = resetState();
+      let steps = 0;
+      while (steps < MAX_STEPS && !isTerminated(s)) {
+        const probs = predict(cp, s);
+        const action = sampleAction(probs);
+        s = physicsStep(s, action);
+        steps += 1;
+      }
+      return steps;
+    }
+
+    async function buildChart() {
+      const chartCanvas = document.getElementById("chart-canvas");
+      const cctx = chartCanvas.getContext("2d");
+      const results = [];
+
+      for (const pct of checkpointPcts) {
+        const path = `../public/checkpoints/cartpole/reinforce/checkpoint_${String(pct).padStart(3, "0")}.json`;
+        let cp;
+        try {
+          cp = await loadCheckpoint(path);
+        } catch (err) {
+          console.error(err);
+          continue;
+        }
+        const trials = 5;
+        let total = 0;
+        for (let i = 0; i < trials; i++) {
+          total += rolloutEpisodeLength(cp);
+        }
+        results.push({ pct, avgLength: total / trials });
+        drawChart(cctx, chartCanvas, results);
+      }
+    }
+
+    function drawChart(cctx, chartCanvas, results) {
+      const w = chartCanvas.width;
+      const h = chartCanvas.height;
+      cctx.clearRect(0, 0, w, h);
+
+      const padding = { top: 8, right: 8, bottom: 20, left: 30 };
+      const plotW = w - padding.left - padding.right;
+      const plotH = h - padding.top - padding.bottom;
+      const maxY = MAX_STEPS;
+
+      // Axes
+      cctx.strokeStyle = "#5a5a63";
+      cctx.lineWidth = 1;
+      cctx.beginPath();
+      cctx.moveTo(padding.left, padding.top);
+      cctx.lineTo(padding.left, padding.top + plotH);
+      cctx.lineTo(padding.left + plotW, padding.top + plotH);
+      cctx.stroke();
+
+      cctx.fillStyle = "#a1a1aa";
+      cctx.font = "9px sans-serif";
+      cctx.fillText("500", 2, padding.top + 4);
+      cctx.fillText("0", 12, padding.top + plotH + 4);
+
+      const barWidth = plotW / Math.max(checkpointPcts.length, 1);
+
+      results.forEach((r, i) => {
+        const barH = (r.avgLength / maxY) * plotH;
+        const barX = padding.left + i * barWidth + barWidth * 0.15;
+        const barY = padding.top + plotH - barH;
+        cctx.fillStyle = "#6d93ff";
+        cctx.fillRect(barX, barY, barWidth * 0.7, barH);
+
+        cctx.fillStyle = "#a1a1aa";
+        cctx.font = "9px sans-serif";
+        cctx.textAlign = "center";
+        cctx.fillText(
+          r.pct + "%",
+          barX + (barWidth * 0.7) / 2,
+          padding.top + plotH + 12
+        );
+        cctx.textAlign = "left";
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
