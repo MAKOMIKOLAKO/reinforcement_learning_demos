@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Snake &middot; DQN &middot; RL Demos</title>
+  <meta name="description" content="A Deep Q-Network plays Snake in your browser, running its forward pass live from an offline-trained checkpoint." />
+  <link rel="stylesheet" href="../shared/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <span class="brand">RL Demos</span>
+      <nav>
+        <a href="../index.html">All demos</a>
+        <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Snake &middot; Deep Q-Network</h1>
+      <p>
+        A DQN agent estimates a Q-value for each of the four moves and
+        greedily plays whichever move scores highest. Scrub the training
+        progress slider to see the same network at different points in
+        training, from random flailing to confident food-seeking.
+      </p>
+
+      <div class="demo-layout">
+        <div class="stage">
+          <canvas id="board" width="400" height="400" aria-label="Snake game board"></canvas>
+
+          <div class="controls">
+            <button id="playPauseBtn" class="primary" type="button">Pause</button>
+            <button id="stepBtn" type="button">Step</button>
+            <button id="restartBtn" type="button">Restart</button>
+          </div>
+
+          <div class="slider-row">
+            <label for="progressSlider">Training progress</label>
+            <input id="progressSlider" type="range" min="0" max="6" step="1" value="6" />
+            <output id="progressOutput">100%</output>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Stats</h2>
+          <div class="stat-row">
+            <span>Checkpoint</span>
+            <span class="value" id="statCheckpoint">loading&hellip;</span>
+          </div>
+          <div class="stat-row">
+            <span>Score</span>
+            <span class="value" id="statScore">0</span>
+          </div>
+          <div class="stat-row">
+            <span>Steps</span>
+            <span class="value" id="statSteps">0</span>
+          </div>
+          <div class="stat-row">
+            <span>Status</span>
+            <span class="value" id="statStatus">&mdash;</span>
+          </div>
+
+          <h3>How it works</h3>
+          <p>
+            DQN learns a single value network that outputs a Q-value for
+            every possible action given the current state &mdash; there's no
+            separate policy network. Acting is just <code>argmax</code>: at
+            every step the agent picks whichever action the network scores
+            highest, with no sampling involved.
+          </p>
+          <p>
+            The 11-value input encodes danger one cell ahead/left/right of
+            the snake's heading, the current heading itself, and which
+            absolute direction the food is in.
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>Training happens offline; this page only runs forward passes on an exported checkpoint.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
