@@ -1,0 +1,414 @@
+/* ==========================================================================
+   RL Demos — shared styles
+   Used by the landing page (index.html) and all demo pages
+   (snake/, cartpole/, pendulum/). Keep this generic: demo pages share a
+   canvas, playback controls, a progress slider, and an explanation panel.
+   ========================================================================== */
+
+:root {
+  --bg: #f7f7f8;
+  --bg-elevated: #ffffff;
+  --text: #1a1a1e;
+  --text-muted: #5a5a63;
+  --border: #e0e0e5;
+  --accent: #3b6ef6;
+  --accent-hover: #2f58cc;
+  --accent-contrast: #ffffff;
+  --canvas-bg: #101014;
+  --danger: #d64545;
+  --success: #2fa563;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --radius: 10px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16161a;
+    --bg-elevated: #1e1e23;
+    --text: #eaeaef;
+    --text-muted: #a1a1aa;
+    --border: #2e2e35;
+    --accent: #6d93ff;
+    --accent-hover: #8badff;
+    --accent-contrast: #0c0c0f;
+    --canvas-bg: #0a0a0c;
+    --danger: #f2685f;
+    --success: #4cc989;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Manual theme override, e.g. <html data-theme="dark"> */
+:root[data-theme="dark"] {
+  --bg: #16161a;
+  --bg-elevated: #1e1e23;
+  --text: #eaeaef;
+  --text-muted: #a1a1aa;
+  --border: #2e2e35;
+  --accent: #6d93ff;
+  --accent-hover: #8badff;
+  --accent-contrast: #0c0c0f;
+  --canvas-bg: #0a0a0c;
+  --danger: #f2685f;
+  --success: #4cc989;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="light"] {
+  --bg: #f7f7f8;
+  --bg-elevated: #ffffff;
+  --text: #1a1a1e;
+  --text-muted: #5a5a63;
+  --border: #e0e0e5;
+  --accent: #3b6ef6;
+  --accent-hover: #2f58cc;
+  --accent-contrast: #ffffff;
+  --canvas-bg: #101014;
+  --danger: #d64545;
+  --success: #2fa563;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* --------------------------------------------------------------------------
+   Layout shells
+   -------------------------------------------------------------------------- */
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.site-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header .brand {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.site-header nav a {
+  color: var(--text-muted);
+  margin-left: 1.25rem;
+  font-size: 0.95rem;
+}
+
+.site-header nav a:hover {
+  color: var(--text);
+}
+
+.site-footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* --------------------------------------------------------------------------
+   Landing page: demo cards
+   -------------------------------------------------------------------------- */
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.demo-card {
+  display: block;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  color: var(--text);
+}
+
+.demo-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
+.demo-card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+}
+
+.demo-card .algo-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.demo-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+/* --------------------------------------------------------------------------
+   Demo page layout: canvas + controls + explanation panel
+   -------------------------------------------------------------------------- */
+
+.demo-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  .demo-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stage {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+}
+
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--canvas-bg);
+  border-radius: calc(var(--radius) - 4px);
+  image-rendering: pixelated;
+}
+
+/* Playback controls: play/pause/step/restart */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.controls button:hover {
+  border-color: var(--accent);
+}
+
+.controls button:active {
+  transform: translateY(1px);
+}
+
+.controls button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.controls button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Training-progress slider */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.slider-row label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.slider-row output {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text);
+  min-width: 3.5rem;
+  text-align: right;
+}
+
+input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--border);
+  border-radius: 999px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Explanation / info panel */
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+}
+
+.panel h2,
+.panel h3 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.panel p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.panel dl {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.panel dt {
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+}
+
+.panel dd {
+  margin: 0.1rem 0 0;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 0.88rem;
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-row .value {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+/* Generic status badge, e.g. "training…" / "loaded" */
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+.badge.error {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}

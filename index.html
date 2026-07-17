@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RL Demos</title>
+  <meta name="description" content="Interactive, in-browser demos of reinforcement learning agents trained offline in Python." />
+  <link rel="stylesheet" href="shared/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <span class="brand">RL Demos</span>
+      <nav>
+        <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Reinforcement Learning, live in your browser</h1>
+      <p>
+        Three agents, trained offline in Python and exported as checkpoints.
+        Scrub the training-progress slider on each demo to watch policies
+        evolve from random noise to competent behavior, running entirely as
+        client-side JavaScript.
+      </p>
+
+      <div class="demo-grid">
+        <a class="demo-card" href="/snake/">
+          <span class="algo-tag">DQN &middot; value-only</span>
+          <h2>Snake</h2>
+          <p>A Deep Q-Network learns to estimate action values and greedily picks the best move to survive and grow.</p>
+        </a>
+
+        <a class="demo-card" href="/cartpole/">
+          <span class="algo-tag">REINFORCE &middot; policy-only</span>
+          <h2>CartPole</h2>
+          <p>A REINFORCE agent learns a stochastic policy directly, balancing a pole by sampling actions from probabilities.</p>
+        </a>
+
+        <a class="demo-card" href="/pendulum/">
+          <span class="algo-tag">PPO &middot; actor-critic</span>
+          <h2>Pendulum</h2>
+          <p>A PPO agent jointly learns a policy and a value function, swinging up and balancing a continuous-control pendulum.</p>
+        </a>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>Training happens offline; this site only runs forward passes on exported checkpoints.</p>
+    </footer>
+  </div>
+</body>
+</html>
