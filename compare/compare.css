@@ -1,0 +1,100 @@
+/* ==========================================================================
+   compare/index.html — page-specific styles.
+   Reuses tokens (colors, radius, shadow, fonts) defined in shared/style.css;
+   only adds the table and note-layout rules that page needs.
+   ========================================================================== */
+
+.table-scroll {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  min-width: 640px;
+}
+
+.compare-table th,
+.compare-table td {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.compare-table thead th {
+  color: var(--text);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  white-space: nowrap;
+}
+
+.compare-table thead th .algo-tag {
+  display: block;
+  margin-top: 0.3rem;
+}
+
+.compare-table tbody th[scope="row"] {
+  color: var(--text-muted);
+  font-weight: 600;
+  width: 16rem;
+}
+
+.compare-table tbody td {
+  color: var(--text);
+}
+
+.compare-table tbody tr:last-child th,
+.compare-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.algo-notes h2,
+.deep-dive-links h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.algo-note {
+  margin-top: 1.25rem;
+}
+
+.algo-note:first-of-type {
+  margin-top: 0.75rem;
+}
+
+.algo-note h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.algo-note p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.deep-dive-links {
+  margin-top: 1.5rem;
+}
+
+.deep-dive-links .demo-grid {
+  margin-top: 1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Glossary term affordance (works even before shared/glossary.js enhances
+   these spans into full tooltips — see compare.js).
+   -------------------------------------------------------------------------- */
+
+.glossary-term {
+  border-bottom: 1px dotted var(--text-muted);
+  cursor: help;
+}

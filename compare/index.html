@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Compare DQN, REINFORCE &amp; PPO &middot; RL Demos</title>
+  <meta name="description" content="A side-by-side comparison of DQN, REINFORCE, and PPO: what each algorithm actually learns, when it's on- vs off-policy, and when you'd reach for one over the others." />
+  <link rel="stylesheet" href="../shared/style.css" />
+  <link rel="stylesheet" href="./compare.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <span class="brand">RL Demos</span>
+      <nav>
+        <a href="../index.html">All demos</a>
+        <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>DQN vs. REINFORCE vs. PPO</h1>
+      <p>
+        All three demos on this site are solving the same kind of problem
+        &mdash; an agent interacting with an
+        <span class="glossary-term" data-glossary="MDP">MDP</span>
+        and trying to maximize reward &mdash; but they get there in
+        genuinely different ways. This page lines them up side by side so
+        the differences are concrete, not just three different acronyms.
+      </p>
+
+      <div class="table-scroll">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th scope="col">Aspect</th>
+              <th scope="col">DQN <span class="algo-tag">value-only</span></th>
+              <th scope="col">REINFORCE <span class="algo-tag">policy-only</span></th>
+              <th scope="col">PPO <span class="algo-tag">actor-critic</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Learns a <span class="glossary-term" data-glossary="value function">value function</span>?</th>
+              <td>Yes &mdash; a Q-network estimating the value of each action</td>
+              <td>No</td>
+              <td>Yes &mdash; a critic estimating state value, used to reduce variance</td>
+            </tr>
+            <tr>
+              <th scope="row">Learns a <span class="glossary-term" data-glossary="policy">policy</span> directly?</th>
+              <td>No &mdash; behavior falls out of <code>argmax</code> over Q-values</td>
+              <td>Yes &mdash; a network outputs action probabilities directly</td>
+              <td>Yes &mdash; an actor network outputs action probabilities directly</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="glossary-term" data-glossary="on-policy">On-policy</span> or <span class="glossary-term" data-glossary="off-policy">off-policy</span>?</th>
+              <td>Off-policy &mdash; learns from a <span class="glossary-term" data-glossary="replay buffer">replay buffer</span> of old experience</td>
+              <td>On-policy &mdash; every update needs fresh trajectories from the current policy</td>
+              <td>On-policy (with limited reuse via clipping)</td>
+            </tr>
+            <tr>
+              <th scope="row">Typical <span class="glossary-term" data-glossary="sample efficiency">sample efficiency</span></th>
+              <td>High &mdash; every transition gets reused many times</td>
+              <td>Low &mdash; each trajectory is used once, then discarded</td>
+              <td>Medium &mdash; a handful of epochs per batch of trajectories</td>
+            </tr>
+            <tr>
+              <th scope="row">Typical training stability</th>
+              <td>Medium &mdash; can diverge without target networks / careful tuning</td>
+              <td>Low &mdash; <span class="glossary-term" data-glossary="variance">high-variance</span> gradient estimates, noisy learning curves</td>
+              <td>High &mdash; the critic and clipped objective damp destructive updates</td>
+            </tr>
+            <tr>
+              <th scope="row">Works with continuous action spaces?</th>
+              <td>No &mdash; needs a discrete action set to take an <code>argmax</code> over</td>
+              <td>Yes, with a suitable output distribution (e.g. Gaussian)</td>
+              <td>Yes &mdash; the demo here outputs a continuous torque</td>
+            </tr>
+            <tr>
+              <th scope="row">Real-world use-case hint</th>
+              <td>Recommender systems / discrete decision-making with logged historical data to replay</td>
+              <td>Small, well-understood discrete-action problems where simplicity beats speed</td>
+              <td>Robotics and continuous control where stable, reliable convergence matters</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="panel algo-notes">
+        <h2>When you'd actually reach for each one</h2>
+
+        <div class="algo-note">
+          <h3>DQN</h3>
+          <p>
+            Reach for DQN when the action space is discrete and you can
+            afford to store and revisit past experience. Its
+            <span class="glossary-term" data-glossary="replay buffer">replay buffer</span>
+            is what makes it so
+            <span class="glossary-term" data-glossary="sample efficiency">sample-efficient</span>
+            &mdash; every transition the agent ever saw can be replayed
+            many times during training, instead of being thrown away after
+            one gradient step. The tradeoff is that this whole approach is
+            built around picking the best of a fixed, enumerable set of
+            actions: there's no clean way to take an <code>argmax</code>
+            over a continuous range of torques or velocities, so DQN
+            doesn't extend to continuous control without substantial
+            reworking (e.g. discretizing the action space, which throws
+            away precision).
+          </p>
+        </div>
+
+        <div class="algo-note">
+          <h3>REINFORCE</h3>
+          <p>
+            Reach for REINFORCE when you want the simplest possible policy
+            gradient method, or the problem is small enough that
+            <span class="glossary-term" data-glossary="sample efficiency">sample efficiency</span>
+            doesn't matter much. It optimizes the policy directly by
+            pushing up the probability of actions that led to high reward,
+            which is general enough to work in discrete or continuous
+            action spaces alike with no value function required. The cost
+            of that simplicity is <span class="glossary-term" data-glossary="variance">variance</span>:
+            because it relies on full-episode returns as its only signal,
+            gradient estimates are noisy, so training tends to need many
+            more episodes and a lot of patience compared to methods that
+            bootstrap off a learned value estimate.
+          </p>
+        </div>
+
+        <div class="algo-note">
+          <h3>PPO</h3>
+          <p>
+            Reach for PPO when you need continuous actions and stable,
+            repeatable training &mdash; which is why it's a default choice
+            for robotics and other continuous-control tasks. Its critic
+            gives updates a lower-variance baseline than REINFORCE's raw
+            returns, and its clipped objective keeps any single policy
+            update from moving too far, so training rarely blows up the
+            way plain policy gradients can. That stability isn't free:
+            PPO is more moving parts than REINFORCE (an actor
+            <em>and</em> a critic, plus a clipping hyperparameter to tune)
+            and, like REINFORCE, it's still <span class="glossary-term" data-glossary="on-policy">on-policy</span>,
+            so it can't reuse old experience the way DQN's replay buffer
+            can.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel deep-dive-links">
+        <h2>See each one in action</h2>
+        <div class="demo-grid">
+          <a class="demo-card" href="../snake/">
+            <span class="algo-tag">DQN &middot; value-only</span>
+            <h3>Snake</h3>
+            <p>Watch a Q-network's greedy action choices sharpen over training.</p>
+          </a>
+          <a class="demo-card" href="../cartpole/">
+            <span class="algo-tag">REINFORCE &middot; policy-only</span>
+            <h3>CartPole</h3>
+            <p>Watch a stochastic policy's action probabilities converge on balance.</p>
+          </a>
+          <a class="demo-card" href="../pendulum/">
+            <span class="algo-tag">PPO &middot; actor-critic</span>
+            <h3>Pendulum</h3>
+            <p>Watch an actor-critic pair swing up and stabilize a continuous pendulum.</p>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>Training happens offline; this site only runs forward passes on exported checkpoints.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="./compare.js"></script>
+</body>
+</html>
