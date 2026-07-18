@@ -261,6 +261,33 @@ async function loadCheckpointForPct(pct) {
   resetState();
   render();
   updateStats();
+  // Let any listener (e.g. the step-through diagram) know the live checkpoint
+  // just changed, so it can re-render against the newly-selected weights.
+  document.dispatchEvent(new CustomEvent("pendulum:checkpoint-changed"));
+}
+
+// ---------------------------------------------------------------------------
+// Accessors for other modules/inline scripts on this page (the flow-stepper
+// diagram) that need to read the CURRENT live rollout state/checkpoint
+// without duplicating the rollout loop above.
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the live observation vector [cos(theta), sin(theta), angular
+ * velocity] currently driving the rollout, exactly as fed to predict().
+ * @returns {number[]}
+ */
+export function getLiveObservation() {
+  return [Math.cos(theta), Math.sin(theta), thetaDot];
+}
+
+/**
+ * Returns the currently-loaded checkpoint object (or null if not loaded
+ * yet), the same object passed to predict() by the rollout loop.
+ * @returns {object|null}
+ */
+export function getLiveCheckpoint() {
+  return checkpoint;
 }
 
 async function init() {
