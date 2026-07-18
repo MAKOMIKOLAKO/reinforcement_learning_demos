@@ -95,21 +95,61 @@
         </p>
       </section>
 
-      <section class="diagram-section" id="diagram-section">
+      <section class="env-section" id="stepper-section">
         <h2>How PPO processes a step</h2>
-        <div class="diagram-container" id="ppo-diagram"></div>
-        <p class="diagram-caption">
-          This diagram is visually busier than the REINFORCE diagram on the
-          CartPole page, and that's the point, not incidental complexity.
-          PPO runs two networks side by side &mdash; an
-          <span id="gloss-actor-critic-2"></span> that outputs the action
-          distribution, and a critic that outputs a
-          <span id="gloss-value-function"></span> estimate &mdash; and adds
-          two extra computed nodes REINFORCE doesn't have: the
-          <span id="gloss-advantage"></span> (return minus the critic's
-          baseline) and the <span id="gloss-clipped-objective"></span> that
-          actually updates the actor. Every one of those extra boxes exists
-          to buy training stability; none of it is decorative.
+        <p>
+          Step through what actually happens on every physics tick of the
+          live rollout below, using the currently-selected checkpoint's real
+          weights and the pendulum's current state &mdash; nothing here is a
+          canned example.
+        </p>
+        <div id="ppo-stepper"></div>
+      </section>
+
+      <section class="env-section" id="training-section">
+        <h2>How this checkpoint was trained</h2>
+        <p>
+          The step-through above describes <strong>inference</strong>: what
+          runs live, in your browser, right now. Training happened offline,
+          beforehand, and used machinery that never runs here. Two pieces of
+          it are worth understanding to make sense of the checkpoint slider's
+          progression.
+        </p>
+        <p>
+          REINFORCE (used on the CartPole page) updates its policy from raw
+          episode <span id="gloss-return-train"></span> alone &mdash; a noisy
+          signal, since the same action can look great or terrible purely
+          because of what randomly happened later in the episode. PPO adds a
+          <span id="gloss-baseline-train"></span>: the critic learns to
+          predict how good a state already is, and that prediction gets
+          subtracted from the observed return to compute an
+          <span id="gloss-advantage-train"></span>. Subtracting a
+          state-dependent baseline doesn't change what the optimal policy is,
+          but it does remove a large chunk of the variance from the gradient
+          signal &mdash; the policy update reacts to "was this action better
+          or worse than expected here," not to the raw, noisy total.
+        </p>
+        <p>
+          The other piece is the
+          <span id="gloss-clipped-objective-train"></span>. In plain terms:
+          it caps how far a single update is allowed to shift the policy's
+          action probabilities. Without that cap, one unlucky batch of
+          rollout data could yank the policy sharply in the wrong direction.
+          The clip keeps each update small enough that a bad batch does
+          limited damage.
+        </p>
+        <p>
+          One more detail that only matters during training: while the live
+          widget above always uses the actor's direct output (deterministic),
+          during training the actor instead defines a Gaussian distribution
+          centered on that same output value, and the action actually taken
+          is <em>sampled</em> from that distribution. That randomness is what
+          lets PPO explore torques it wouldn't otherwise try, so it can
+          discover whether they work better than its current best guess. As
+          training progresses, the distribution typically narrows around
+          better and better means &mdash; which is exactly what you're
+          seeing when you scrub the checkpoint slider from flailing torque to
+          a held balance.
         </p>
       </section>
 
@@ -233,8 +273,10 @@
   </div>
 
   <script type="module">
-    import { renderDiagram } from "../shared/rl-diagrams.js";
     import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
+    import { createStepper } from "../shared/flow-stepper.js";
+    import { predict } from "../shared/inference.js";
+    import { getLiveObservation, getLiveCheckpoint } from "./pendulum.js";
 
     // Pendulum-specific terms not already in the shared glossary map.
     addTerms({
@@ -242,30 +284,176 @@
         "An RL architecture with two learned networks working together: an actor that picks actions (the policy) and a critic that estimates state values, used by the critic to judge the actor's choices.",
       "continuous action space":
         "An action space where the agent outputs a real number (or a distribution over real numbers) rather than choosing from a fixed, finite list of discrete actions.",
+      "critic":
+        "The second network PPO trains alongside the actor. It takes a state and outputs a single number estimating how good that state is (the value function), used only during training to compute the advantage — it never picks actions and never runs at inference time.",
     });
-
-    renderDiagram("ppo-diagram", "ppo");
 
     document.getElementById("gloss-state-space").outerHTML =
       glossaryTerm("state space", "state encoding");
     document.getElementById("gloss-actor-critic-1").outerHTML =
       glossaryTerm("actor-critic", "actor");
     document.getElementById("gloss-policy").outerHTML = glossaryTerm("policy");
-    document.getElementById("gloss-actor-critic-2").outerHTML =
-      glossaryTerm("actor-critic", "actor");
-    document.getElementById("gloss-value-function").outerHTML =
-      glossaryTerm("value function");
-    document.getElementById("gloss-advantage").outerHTML = glossaryTerm("advantage");
-    document.getElementById("gloss-clipped-objective").outerHTML =
-      glossaryTerm("clipped surrogate objective", "clipped objective");
     document.getElementById("gloss-return").outerHTML = glossaryTerm("return");
     document.getElementById("gloss-baseline").outerHTML = glossaryTerm("baseline");
     document.getElementById("gloss-advantage-2").outerHTML = glossaryTerm("advantage");
     document.getElementById("gloss-clipped-objective-2").outerHTML =
       glossaryTerm("clipped surrogate objective");
     document.getElementById("gloss-on-policy").outerHTML = glossaryTerm("on-policy");
+    document.getElementById("gloss-return-train").outerHTML = glossaryTerm("return");
+    document.getElementById("gloss-baseline-train").outerHTML = glossaryTerm("baseline");
+    document.getElementById("gloss-advantage-train").outerHTML = glossaryTerm("advantage");
+    document.getElementById("gloss-clipped-objective-train").outerHTML =
+      glossaryTerm("clipped surrogate objective", "clipped objective");
 
     initGlossary();
+
+    // ---------------------------------------------------------------------
+    // Step-through diagram: 4 stages, each reading REAL values from the live
+    // rollout (current state + currently-selected checkpoint) via the
+    // accessors pendulum.js exports, rather than any hardcoded example.
+    // ---------------------------------------------------------------------
+
+    function torqueScaleMarkup(torque) {
+      const MAX_TORQUE = 2.0;
+      const clamped = Math.max(-MAX_TORQUE, Math.min(MAX_TORQUE, torque));
+      const pct = ((clamped + MAX_TORQUE) / (2 * MAX_TORQUE)) * 100;
+      return `
+        <div style="position: relative; height: 2.5rem; margin: 0.75rem 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
+          <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border);"></div>
+          <div style="position: absolute; left: ${pct}%; top: 0.25rem; bottom: 0.25rem; width: 0.6rem; margin-left: -0.3rem; border-radius: 3px; background: var(--accent);"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">
+          <span>-2.0 N&middot;m</span>
+          <span>0</span>
+          <span>+2.0 N&middot;m</span>
+        </div>
+      `;
+    }
+
+    function stateStage(el) {
+      const [c, s, w] = getLiveObservation();
+      el.innerHTML = `
+        <h3>State</h3>
+        <div class="flow-stepper-chips">
+          <div class="flow-stepper-chip"><span class="flow-stepper-chip-label">cos(&theta;)</span>${c.toFixed(3)}</div>
+          <div class="flow-stepper-chip"><span class="flow-stepper-chip-label">sin(&theta;)</span>${s.toFixed(3)}</div>
+          <div class="flow-stepper-chip"><span class="flow-stepper-chip-label">angular velocity</span>${w.toFixed(3)}</div>
+        </div>
+        <p>
+          The angle is encoded as its cosine and sine rather than as a raw
+          angle value. A raw angle wraps discontinuously from +&pi; to -&pi;
+          as the pendulum swings through the bottom &mdash; the same
+          physical position would otherwise be represented by two numbers at
+          opposite ends of the range. The cos/sin pair moves smoothly around
+          the unit circle instead, so nearby physical angles always map to
+          nearby numbers, with no seam for the ${glossaryTerm("state space", "state encoding")}
+          to trip over. Angular velocity is simply how fast &theta; is
+          currently changing, in radians per second.
+        </p>
+      `;
+    }
+
+    function actorStage(el) {
+      const checkpoint = getLiveCheckpoint();
+      const obs = getLiveObservation();
+      const torque = checkpoint ? predict(checkpoint, obs)[0] : 0;
+      el.innerHTML = `
+        <h3>Actor network</h3>
+        <div class="flow-stepper-callout">Output torque: <strong>${torque.toFixed(3)} N&middot;m</strong></div>
+        ${torqueScaleMarkup(torque)}
+        <p>
+          This network outputs a single continuous number directly &mdash;
+          it does not output a probability per discrete action the way
+          Snake's DQN or CartPole's REINFORCE policy do. That's what a
+          ${glossaryTerm("continuous action space")} means: instead of
+          choosing among a handful of labeled moves, the actor's forward
+          pass produces a real-valued torque (here, already scaled by the
+          environment's &plusmn;2.0 N&middot;m range), which is applied to
+          the pendulum as-is.
+        </p>
+      `;
+    }
+
+    function criticStage(el) {
+      el.innerHTML = `
+        <h3>Critic (value function)</h3>
+        <p>
+          PPO trains a second network, the ${glossaryTerm("critic")}, whose
+          job is to output a ${glossaryTerm("value function", "value estimate")}
+          for the current state &mdash; a single number predicting how much
+          total future reward (here, how little future penalty) the agent
+          expects from this state onward. It never picks actions itself.
+        </p>
+        <p class="flow-stepper-callout">
+          No live number here: this demo's checkpoint files only export the
+          actor's weights (an <code>input_dim 3, hidden [64,64], output_dim 1</code>
+          network with a tanh output), not the critic's. The critic only
+          ever runs during training, to compute the advantage used to update
+          the actor &mdash; it never runs at inference time, here or in the
+          real world, so there's nothing to compute live in this stage.
+        </p>
+        <p>
+          It's worth contrasting all three algorithms on this site here,
+          since this is the page where the difference is most visible.
+          Snake's DQN estimates a Q-value <em>per action</em> (one number for
+          each of four moves). CartPole's REINFORCE has no value estimate at
+          all &mdash; it learns purely from raw episode returns. PPO's critic
+          estimates a value <em>per state</em>, independent of any action,
+          but &mdash; unlike DQN's Q-network &mdash; that estimate is only
+          ever used during training, never at inference time.
+        </p>
+      `;
+    }
+
+    function actionStage(el) {
+      const checkpoint = getLiveCheckpoint();
+      const obs = getLiveObservation();
+      const torque = checkpoint ? predict(checkpoint, obs)[0] : 0;
+      el.innerHTML = `
+        <h3>Action</h3>
+        <div class="flow-stepper-callout">Torque sent to the environment: <strong>${torque.toFixed(3)} N&middot;m</strong></div>
+        <p>
+          At inference time (what's running live on this page), PPO takes
+          the actor's direct output as the action &mdash; deterministically,
+          with no sampling. That's a demo/inference-time design choice,
+          not a training-time one: during training, PPO instead samples the
+          actual action from a Gaussian distribution centered on this same
+          output value, to keep exploring nearby torques rather than always
+          repeating its current best guess. See "How this checkpoint was
+          trained" below for more on that.
+        </p>
+      `;
+    }
+
+    const stepper = createStepper("ppo-stepper", [
+      { key: "state", label: "State", render: stateStage },
+      { key: "actor", label: "Actor", render: actorStage },
+      { key: "critic", label: "Critic", render: criticStage },
+      { key: "action", label: "Action", render: actionStage },
+    ]);
+
+    // Track which stage is currently showing (flow-stepper.js doesn't expose
+    // a getter for this) so a checkpoint change can re-render it in place,
+    // and re-init the glossary after each render since render() replaces
+    // panel innerHTML.
+    let currentStageIndex = 0;
+    const stepperEl = document.getElementById("ppo-stepper");
+    stepperEl.addEventListener("click", (event) => {
+      if (event.target.matches("[data-flow-stepper-next]")) {
+        currentStageIndex = Math.min(currentStageIndex + 1, 3);
+      } else if (event.target.matches("[data-flow-stepper-reset]")) {
+        currentStageIndex = 0;
+      }
+      setTimeout(() => initGlossary(), 0);
+    });
+
+    // When the checkpoint-progress slider changes (event dispatched from
+    // pendulum.js), re-render whichever stage is currently showing so its
+    // numbers reflect the newly-selected checkpoint.
+    document.addEventListener("pendulum:checkpoint-changed", () => {
+      stepper.stepTo(currentStageIndex);
+      setTimeout(() => initGlossary(), 0);
+    });
   </script>
   <script type="module" src="pendulum.js"></script>
 </body>
