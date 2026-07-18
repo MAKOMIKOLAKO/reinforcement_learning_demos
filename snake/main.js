@@ -40,6 +40,16 @@ let playing = true;
 let lastStepTime = 0;
 let rafHandle = null;
 
+/**
+ * Read-only accessor for the currently loaded checkpoint and live game
+ * state, so other modules on this page (e.g. the stepper widget) can run
+ * their own forward passes against exactly what's on screen right now,
+ * without duplicating the rollout loop above.
+ */
+export function getCurrentInference() {
+  return { checkpoint, gameState };
+}
+
 /** Draws the current game state to the canvas. */
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -123,6 +133,9 @@ async function loadCheckpointForSliderValue(sliderValue) {
   gameState = createInitialState();
   render();
   renderStats();
+  // Let other modules on the page (the stepper widget) know a new
+  // checkpoint is live so they can re-run inference against it.
+  document.dispatchEvent(new CustomEvent("snake:checkpointchanged"));
 }
 
 playPauseBtn.addEventListener("click", () => {

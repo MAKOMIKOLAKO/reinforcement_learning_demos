@@ -129,22 +129,29 @@
         </div>
       </div>
 
-      <section class="content-section" id="diagram-section">
-        <h2>How data flows through the network</h2>
+      <section class="content-section" id="stepper-section">
+        <h2>Step through one forward pass, live</h2>
         <p>
-          The diagram below traces one forward pass: the 11-dimensional
-          state goes in, the Q-network outputs one score per action, and
-          <code>argmax</code> picks the move. It also shows the parts of DQN
-          that only matter during training &mdash; the replay buffer and
-          target network &mdash; which this page doesn't exercise live since
-          it only replays pretrained checkpoints.
+          This walks through exactly what the network does on the
+          <strong>current</strong> step of the rollout above, against
+          whichever checkpoint the training-progress slider is currently
+          set to. Click "Step" to advance through state &rarr; Q-network
+          &rarr; argmax &rarr; action; click it again to pull a fresh state
+          and re-run the same four stages. Moving the slider re-computes
+          whichever stage is showing against the newly-selected checkpoint.
         </p>
-        <div class="diagram-frame" id="dqn-diagram"></div>
-        <p class="diagram-caption" id="dqn-diagram-caption"></p>
+        <div id="dqn-stepper"></div>
       </section>
 
       <section class="content-section" id="tradeoffs-section">
-        <h2>Why DQN, and its tradeoffs</h2>
+        <h2>How this checkpoint was trained (and why DQN)</h2>
+        <p class="diagram-caption">
+          Everything in this section describes what happened
+          <strong>offline, during training</strong> &mdash; before this page
+          ever loaded a checkpoint. None of it runs live; it's background for
+          how the network above got its weights. Contrast with the stepper
+          above, which runs a real forward pass on this page right now.
+        </p>
         <div id="tradeoffs-content"></div>
       </section>
     </main>
@@ -157,13 +164,16 @@
   <script type="module" src="./main.js"></script>
 
   <script type="module">
-    import { renderDiagram } from "../shared/rl-diagrams.js";
     import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
 
-    // Snake/DQN-specific term not already in the shared glossary.
+    // Snake/DQN-specific terms not already in the shared glossary.
     addTerms({
       "danger flag":
         "A 0/1 input feature meaning 'moving this direction next would immediately kill the snake' (wall or its own body one cell away) — not a prediction, just a lookahead check baked into the state.",
+      "TD error":
+        "Temporal-difference error: the gap between the Q-network's current prediction for (state, action) and a target built from the observed reward plus the discounted value of the next state, r + gamma * max_a' Q_target(s', a'). Squaring this error is the loss DQN's gradient descent actually minimizes.",
+      "greedy":
+        "Always picking the action with the highest known/estimated value, with no randomness — as opposed to an exploration strategy like epsilon-greedy that sometimes picks a random action instead.",
     });
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -198,20 +208,7 @@
         </li>
       `;
 
-      // --- DQN diagram (diagram-section) --------------------------------------
-      renderDiagram("dqn-diagram", "dqn");
-      document.getElementById("dqn-diagram-caption").innerHTML = `
-        The 11 state values feed a single Q-network, which outputs 4
-        ${glossaryTerm("Q-value", "Q-values")} &mdash; one per action
-        (up/down/left/right). <code>argmax</code> over those 4 numbers picks
-        the move actually taken; there is no separate policy network to
-        consult. The dashed boxes (${glossaryTerm("replay buffer")} and
-        ${glossaryTerm("target network")}) are how the network was trained
-        offline &mdash; they don't run on this page, which only replays the
-        forward-pass half of the diagram against a frozen checkpoint.
-      `;
-
-      // --- Why DQN, and its tradeoffs (tradeoffs-section) ---------------------
+      // --- How this checkpoint was trained (tradeoffs-section) ----------------
       document.getElementById("tradeoffs-content").innerHTML = `
         <p>
           DQN is <strong>value-based</strong>: it learns
@@ -255,6 +252,19 @@
           </li>
         </ul>
         <p>
+          Concretely, every training step samples a batch of
+          (state, action, reward, next state) transitions from the
+          ${glossaryTerm("replay buffer")} and computes a
+          ${glossaryTerm("TD error")} for each one: the difference between
+          the network's current <code>Q(s, a)</code> prediction and the
+          target <code>r + gamma * max_a&prime; Q_target(s&prime;, a&prime;)</code>
+          &mdash; the reward just received plus the discounted best Q-value
+          the frozen target network predicts for the next state. Squaring
+          that difference gives the loss that gradient descent minimizes;
+          over many batches, <code>Q(s, a)</code> is nudged toward actually
+          predicting real future reward instead of an arbitrary number.
+        </p>
+        <p>
           DQN's most important limitation is baked into that
           <code>argmax</code> step: it only works when the action space is
           discrete and small enough to enumerate and score every option, as
@@ -270,6 +280,232 @@
       `;
 
       initGlossary();
+    });
+  </script>
+
+  <script type="module">
+    import { getCurrentInference } from "./main.js";
+    import { predict } from "../shared/inference.js";
+    import { encodeState, argmaxAction } from "./game.js";
+    import { createStepper } from "../shared/flow-stepper.js";
+    import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
+
+    addTerms({
+      "value-based":
+        "A family of RL methods (like DQN) that learn a value function — an estimate of expected future reward — and derive behavior from it (e.g. by taking the action with the highest estimated value), rather than learning a policy directly.",
+    });
+
+    const STATE_LABELS = [
+      "danger_straight",
+      "danger_right",
+      "danger_left",
+      "moving_left",
+      "moving_right",
+      "moving_up",
+      "moving_down",
+      "food_left",
+      "food_right",
+      "food_up",
+      "food_down",
+    ];
+    const ACTION_LABELS = ["Up", "Down", "Left", "Right"];
+
+    // Recomputed at the top of every stage render() so the numbers always
+    // reflect whatever state/checkpoint the live rollout is on right now,
+    // not a snapshot frozen from page load.
+    function currentInference() {
+      const { checkpoint, gameState } = getCurrentInference();
+      if (!checkpoint || !gameState) return null;
+      const observation = encodeState(gameState);
+      const qValues = predict(checkpoint, observation);
+      const actionIndex = argmaxAction(qValues);
+      return { observation, qValues, actionIndex };
+    }
+
+    function afterRender() {
+      initGlossary();
+    }
+
+    function stateStage(el) {
+      const inf = currentInference();
+      if (!inf) {
+        el.innerHTML = `<h3>State</h3><p>Waiting for a checkpoint to load&hellip;</p>`;
+        return;
+      }
+      el.innerHTML = `
+        <h3>State</h3>
+        <div class="flow-stepper-chips">
+          ${STATE_LABELS.map(
+            (label, i) => `
+              <div class="flow-stepper-chip">
+                <span class="flow-stepper-chip-label">${label}</span>
+                ${inf.observation[i]}
+              </div>
+            `
+          ).join("")}
+        </div>
+        <p>
+          In reinforcement learning, the ${glossaryTerm("state space", "state")}
+          is everything the agent observes about the environment at a given
+          moment &mdash; enough information to decide what to do next,
+          without needing to remember the full history that led there. Here
+          it's this real 11-dimensional vector, recomputed fresh from the
+          live game above every time you click "Step" or move the training
+          slider. The three <code>danger_*</code> flags are a one-cell
+          lookahead relative to the snake's <em>current heading</em> (ahead,
+          one turn right, one turn left) &mdash; not compass directions. The
+          four <code>moving_*</code> values are a one-hot encoding of that
+          heading in absolute compass terms (exactly one is 1). The four
+          <code>food_*</code> values compare the food's absolute grid
+          position to the snake's head, independent of heading, so more than
+          one can be 1 at once.
+        </p>
+      `;
+    }
+
+    function qNetworkStage(el) {
+      const inf = currentInference();
+      if (!inf) {
+        el.innerHTML = `<h3>Q-network</h3><p>Waiting for a checkpoint to load&hellip;</p>`;
+        return;
+      }
+      const max = Math.max(...inf.qValues);
+      const min = Math.min(...inf.qValues);
+      const range = max - min || 1;
+      el.innerHTML = `
+        <h3>Q-network</h3>
+        <div class="flow-stepper-bars">
+          ${inf.qValues
+            .map((v, i) => {
+              const heightPct = ((v - min) / range) * 80 + 10;
+              const isWinner = v === max;
+              return `
+                <div class="flow-stepper-bar-col">
+                  <div class="flow-stepper-bar-value">${v.toFixed(3)}</div>
+                  <div class="flow-stepper-bar ${isWinner ? "winner" : ""}" style="height: ${heightPct}%"></div>
+                  <div class="flow-stepper-bar-label">${ACTION_LABELS[i]}</div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+        <p>
+          The state vector is fed through the network's layers to produce
+          one ${glossaryTerm("Q-value")} per action: the network's estimate
+          of total future reward if the snake takes that action right now
+          and then keeps playing well. DQN is
+          ${glossaryTerm("value-based", "value-based")} &mdash; there's one
+          output per action (four numbers, all from a single forward pass)
+          instead of one overall output, because the agent needs to compare
+          every option's value to decide which is best. Bar height here is
+          scaled between this step's own min and max Q-value so small
+          differences stay visible; the raw numbers above each bar are the
+          real predictions.
+        </p>
+      `;
+    }
+
+    function argmaxStage(el) {
+      const inf = currentInference();
+      if (!inf) {
+        el.innerHTML = `<h3>argmax</h3><p>Waiting for a checkpoint to load&hellip;</p>`;
+        return;
+      }
+      const max = Math.max(...inf.qValues);
+      el.innerHTML = `
+        <h3>argmax</h3>
+        <div class="flow-stepper-bars">
+          ${inf.qValues
+            .map((v, i) => {
+              const min = Math.min(...inf.qValues);
+              const range = max - min || 1;
+              const heightPct = ((v - min) / range) * 80 + 10;
+              const isWinner = v === max;
+              return `
+                <div class="flow-stepper-bar-col">
+                  <div class="flow-stepper-bar-value">${v.toFixed(3)}</div>
+                  <div class="flow-stepper-bar ${isWinner ? "winner" : ""}" style="height: ${heightPct}%"></div>
+                  <div class="flow-stepper-bar-label">${ACTION_LABELS[i]}</div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+        <div class="flow-stepper-callout">
+          argmax([${inf.qValues.map((v) => v.toFixed(3)).join(", ")}]) =
+          <strong>${ACTION_LABELS[inf.actionIndex]}</strong>
+        </div>
+        <p>
+          <code>argmax</code> just means "which index had the highest
+          value" &mdash; here, which of the four Q-values is largest, with
+          the winning bar highlighted above. Action selection at inference
+          time is ${glossaryTerm("greedy")}: the agent always takes the
+          highest-scoring action, full stop. That's different from training,
+          which used ${glossaryTerm("epsilon-greedy")} so the agent would
+          occasionally take a random action instead of the best-known one,
+          to keep discovering better strategies. None of that exploration
+          happens here &mdash; this page only replays a frozen, pretrained
+          checkpoint greedily.
+        </p>
+      `;
+    }
+
+    function actionStage(el) {
+      const inf = currentInference();
+      if (!inf) {
+        el.innerHTML = `<h3>Action</h3><p>Waiting for a checkpoint to load&hellip;</p>`;
+        return;
+      }
+      el.innerHTML = `
+        <h3>Action</h3>
+        <div class="flow-stepper-callout">
+          Move chosen: <strong>${ACTION_LABELS[inf.actionIndex]}</strong>
+        </div>
+        <p>
+          This action is what actually gets sent to the environment (the
+          Snake board above): the snake moves one cell in that direction,
+          and the environment returns a reward (+10 for food, -10 for
+          dying, -0.01 otherwise) plus the next state. During training,
+          that whole (state, action, reward, next state) transition would
+          have been stored in the ${glossaryTerm("replay buffer")} and later
+          sampled to compute a learning update. None of that storage or
+          learning happens on this page &mdash; you're stepping through a
+          pretrained, frozen checkpoint, so this action only drives the
+          live rollout forward. See "How this checkpoint was trained" below
+          for what the replay buffer, target network, and loss actually did
+          offline to produce these weights.
+        </p>
+      `;
+    }
+
+    const stepper = createStepper("dqn-stepper", [
+      { key: "state", label: "State", render: stateStage },
+      { key: "qnetwork", label: "Q-network", render: qNetworkStage },
+      { key: "argmax", label: "argmax", render: argmaxStage },
+      { key: "action", label: "Action", render: actionStage },
+    ]);
+
+    // Track which stage is showing (flow-stepper.js doesn't expose this
+    // itself) so a checkpoint change can re-render just that stage.
+    let currentStageIndex = 0;
+    const stepperEl = document.getElementById("dqn-stepper");
+    stepperEl.addEventListener("click", (event) => {
+      if (event.target.closest("[data-flow-stepper-next]")) {
+        currentStageIndex = Math.min(currentStageIndex + 1, 3);
+      } else if (event.target.closest("[data-flow-stepper-reset]")) {
+        currentStageIndex = 0;
+      }
+      // Glossary buttons inside the panel also live under this container;
+      // re-wiring is idempotent (initGlossary skips already-wired buttons).
+      setTimeout(afterRender, 0);
+    });
+    afterRender();
+
+    // main.js dispatches this once a newly-selected checkpoint finishes
+    // loading; re-render whichever stage is currently showing so its
+    // numbers reflect the new checkpoint instead of the old one.
+    document.addEventListener("snake:checkpointchanged", () => {
+      stepper.stepTo(currentStageIndex);
     });
   </script>
 </body>
