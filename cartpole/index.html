@@ -6,6 +6,138 @@
   <title>CartPole &middot; REINFORCE &middot; RL Demos</title>
   <meta name="description" content="A REINFORCE agent balances CartPole live in your browser, sampling actions from a learned stochastic policy." />
   <link rel="stylesheet" href="../shared/style.css" />
+  <style>
+    /* Page-specific styles for the added educational content sections.
+       Reuses the shared color variables from shared/style.css so this stays
+       consistent with the rest of the site in both light and dark mode. */
+    .content-section {
+      margin: 2.5rem 0;
+    }
+
+    .content-section h2 {
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .content-section h3 {
+      font-size: 1rem;
+      margin: 0 0 0.4rem;
+    }
+
+    .env-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .env-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.1rem 1.25rem;
+    }
+
+    .env-card p,
+    .env-card li {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .env-card ul {
+      margin: 0.5rem 0 0;
+      padding-left: 1.1rem;
+    }
+
+    .env-card li + li {
+      margin-top: 0.35rem;
+    }
+
+    .env-card code {
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+
+    .diagram-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.25rem;
+    }
+
+    .diagram-container {
+      width: 100%;
+    }
+
+    .diagram-container svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .diagram-caption {
+      margin: 0.9rem 0 0;
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    .diagram-caption strong {
+      color: var(--text);
+    }
+
+    .tradeoffs-section p {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }
+
+    /* Glossary term tooltip styling */
+    .glossary-term-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .glossary-term {
+      font: inherit;
+      color: var(--accent);
+      background: none;
+      border: none;
+      border-bottom: 1px dashed var(--accent);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .glossary-term:hover,
+    .glossary-term:focus-visible {
+      color: var(--accent-hover);
+      outline: none;
+    }
+
+    .glossary-term:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .glossary-tooltip {
+      position: absolute;
+      bottom: 130%;
+      left: 0;
+      z-index: 10;
+      width: max-content;
+      max-width: 260px;
+      background: var(--text);
+      color: var(--bg);
+      font-size: 0.82rem;
+      line-height: 1.4;
+      padding: 0.5rem 0.65rem;
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+    }
+
+    .glossary-missing {
+      text-decoration: underline dotted;
+    }
+  </style>
 </head>
 <body>
   <div class="page">
@@ -27,6 +159,48 @@
         Scrub the slider below to watch the policy go from random flailing
         to a steady balance as training progresses.
       </p>
+
+      <section class="content-section" aria-labelledby="env-heading">
+        <h2 id="env-heading">Environment</h2>
+        <div class="env-grid">
+          <div class="env-card">
+            <h3>State space</h3>
+            <p>
+              The standard Gym <span id="gloss-cartpole-v1"></span> environment
+              exposes a 4-dimensional <span id="gloss-state-space"></span>
+              vector on every step:
+            </p>
+            <ul>
+              <li><code>cart_position</code> &mdash; the cart's horizontal position on the track.</li>
+              <li><code>cart_velocity</code> &mdash; the cart's horizontal velocity.</li>
+              <li><code>pole_angle</code> &mdash; the pole's angle from vertical upright, in radians.</li>
+              <li><code>pole_angular_velocity</code> &mdash; the rate of change of that angle.</li>
+            </ul>
+          </div>
+          <div class="env-card">
+            <h3>Action space</h3>
+            <p>
+              Two discrete actions make up the entire
+              <span id="gloss-action-space"></span>: push the cart left, or
+              push the cart right. Each is a fixed-magnitude force applied in
+              one direction &mdash; there's no continuous control over how
+              hard to push.
+            </p>
+          </div>
+          <div class="env-card">
+            <h3>Reward function</h3>
+            <p>
+              The <span id="gloss-reward-function"></span> is simple: +1 for
+              every timestep the pole stays upright. The
+              <span id="gloss-episode"></span> ends &mdash; and reward stops
+              &mdash; when any of three things happens: the pole angle
+              exceeds about 12&deg; (0.209 radians) from vertical, the cart
+              leaves the track bounds (&plusmn;2.4 units), or the episode
+              reaches the 500-step cap for CartPole-v1.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <div class="demo-layout">
         <div class="stage">
@@ -94,6 +268,69 @@
           <canvas id="chart-canvas" width="280" height="120"></canvas>
         </aside>
       </div>
+
+      <section class="content-section" aria-labelledby="diagram-heading">
+        <h2 id="diagram-heading">How REINFORCE learns from a trajectory</h2>
+        <div class="diagram-card">
+          <div id="reinforce-diagram" class="diagram-container"></div>
+          <p class="diagram-caption">
+            Two things worth noticing here. <strong>First</strong>, there is
+            no value network anywhere in this diagram &mdash; that's
+            deliberate, not an oversight. REINFORCE has nothing playing the
+            role of a <span id="gloss-baseline-1"></span> or critic.
+            <strong>Second</strong>, the whole episode's
+            <span id="gloss-trajectory-1"></span> has to be collected in the
+            Trajectory Buffer before any learning update happens. That's
+            different from algorithms that learn from individual
+            transitions step by step (like DQN's replay buffer sampling) &mdash;
+            REINFORCE has to wait until the episode ends before it knows the
+            <span id="gloss-return-1"></span> and can compute a gradient.
+          </p>
+        </div>
+      </section>
+
+      <section class="content-section tradeoffs-section" aria-labelledby="tradeoffs-heading">
+        <h2 id="tradeoffs-heading">Why REINFORCE, and its tradeoffs</h2>
+
+        <h3>Policy-based, no baseline</h3>
+        <p>
+          REINFORCE is purely <span id="gloss-policy-1"></span>-based: the
+          policy network directly outputs a probability distribution over
+          actions, and the raw episode <span id="gloss-return-2"></span> is
+          used to weight the policy gradient. Nothing subtracts a learned
+          <span id="gloss-baseline-2"></span> to reduce the variance of that
+          signal.
+        </p>
+
+        <h3>Simple and general, but high-variance</h3>
+        <p>
+          That simplicity is also REINFORCE's strength: because it only
+          needs a distribution to sample from, it works for any action
+          space &mdash; discrete (like CartPole's left/right) or continuous
+          &mdash; with almost no extra machinery. The cost is variance:
+          two trajectories of identical underlying policy quality can end up
+          with very different returns just from stochastic bad luck during
+          sampling, so training tends to look noisier and less monotonic
+          than an algorithm with a baseline. Compare the checkpoint
+          progression on this page &mdash; scrub the slider above and watch
+          the average-episode-length chart &mdash; against the smoother
+          progression on the <a href="../pendulum/index.html">Pendulum/PPO
+          page</a>, where a learned value function damps that noise out.
+        </p>
+
+        <h3>On-policy: no replay buffer reuse</h3>
+        <p>
+          REINFORCE is strictly <span id="gloss-on-policy-1"></span>: every
+          trajectory used for an update must come from the current policy.
+          Once the policy changes, older trajectories can't be reused for
+          further learning. Contrast that with DQN, which is off-policy and
+          reuses old transitions from a <span id="gloss-replay-buffer-1"></span>
+          over and over. That reuse gap hurts REINFORCE's
+          <span id="gloss-sample-efficiency-1"></span> &mdash; it needs more
+          fresh environment interaction to make the same amount of learning
+          progress.
+        </p>
+      </section>
     </main>
 
     <footer class="site-footer">
@@ -461,6 +698,46 @@
     }
 
     init();
+  </script>
+
+  <script type="module">
+    import { renderREINFORCEDiagram, mountDiagram } from "../shared/rl-diagrams.js";
+    import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
+
+    // Page-specific terms not already in the shared glossary map.
+    addTerms({
+      "CartPole-v1":
+        "The classic Gym/Gymnasium control task simulated on this page: balance a pole hinged to a cart by pushing the cart left or right.",
+      "episode":
+        "One full run of the environment from reset to termination (or the step cap), made up of a sequence of state/action/reward steps.",
+      "policy gradient":
+        "The gradient of expected return with respect to the policy's parameters; REINFORCE estimates it directly from sampled trajectories and their returns.",
+    });
+
+    mountDiagram(
+      document.getElementById("reinforce-diagram"),
+      renderREINFORCEDiagram({ stateDim: 4, actions: ["push left", "push right"], episodeSteps: 4 })
+    );
+
+    document.getElementById("gloss-cartpole-v1").outerHTML = glossaryTerm("CartPole-v1");
+    document.getElementById("gloss-state-space").outerHTML = glossaryTerm("state space");
+    document.getElementById("gloss-action-space").outerHTML = glossaryTerm("action space");
+    document.getElementById("gloss-reward-function").outerHTML = glossaryTerm("reward function");
+    document.getElementById("gloss-episode").outerHTML = glossaryTerm("episode");
+
+    document.getElementById("gloss-baseline-1").outerHTML = glossaryTerm("baseline");
+    document.getElementById("gloss-trajectory-1").outerHTML = glossaryTerm("trajectory");
+    document.getElementById("gloss-return-1").outerHTML = glossaryTerm("return");
+
+    document.getElementById("gloss-policy-1").outerHTML = glossaryTerm("policy");
+    document.getElementById("gloss-return-2").outerHTML = glossaryTerm("return");
+    document.getElementById("gloss-baseline-2").outerHTML = glossaryTerm("baseline");
+
+    document.getElementById("gloss-on-policy-1").outerHTML = glossaryTerm("on-policy");
+    document.getElementById("gloss-replay-buffer-1").outerHTML = glossaryTerm("replay buffer");
+    document.getElementById("gloss-sample-efficiency-1").outerHTML = glossaryTerm("sample efficiency");
+
+    initGlossary();
   </script>
 </body>
 </html>
