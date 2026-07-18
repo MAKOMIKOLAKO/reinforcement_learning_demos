@@ -58,24 +58,6 @@
       font-size: 0.85rem;
     }
 
-    .diagram-card {
-      background: var(--bg-elevated);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 1.25rem;
-    }
-
-    .diagram-container {
-      width: 100%;
-    }
-
-    .diagram-container svg {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-
     .diagram-caption {
       margin: 0.9rem 0 0;
       color: var(--text-muted);
@@ -269,24 +251,56 @@
         </aside>
       </div>
 
-      <section class="content-section" aria-labelledby="diagram-heading">
-        <h2 id="diagram-heading">How REINFORCE learns from a trajectory</h2>
-        <div class="diagram-card">
-          <div id="reinforce-diagram" class="diagram-container"></div>
-          <p class="diagram-caption">
-            Two things worth noticing here. <strong>First</strong>, there is
-            no value network anywhere in this diagram &mdash; that's
-            deliberate, not an oversight. REINFORCE has nothing playing the
-            role of a <span id="gloss-baseline-1"></span> or critic.
-            <strong>Second</strong>, the whole episode's
-            <span id="gloss-trajectory-1"></span> has to be collected in the
-            Trajectory Buffer before any learning update happens. That's
-            different from algorithms that learn from individual
-            transitions step by step (like DQN's replay buffer sampling) &mdash;
-            REINFORCE has to wait until the episode ends before it knows the
-            <span id="gloss-return-1"></span> and can compute a gradient.
-          </p>
-        </div>
+      <section class="content-section" aria-labelledby="stepper-heading">
+        <h2 id="stepper-heading">Step through a decision, live</h2>
+        <p class="diagram-caption">
+          This steps through exactly what the running policy above is doing
+          right now, using the real state and the real checkpoint currently
+          selected on the training-progress slider. Click "Step" to walk
+          through it; moving the slider updates the numbers shown at the
+          current stage.
+        </p>
+        <div id="cartpole-stepper"></div>
+      </section>
+
+      <section class="content-section" aria-labelledby="training-heading">
+        <h2 id="training-heading">How this checkpoint was trained</h2>
+        <p>
+          The stepper above shows a single forward pass through the policy
+          &mdash; it's not training. Training happened offline, and looked
+          like this instead.
+        </p>
+        <h3>1. Collect a full trajectory</h3>
+        <p>
+          Unlike algorithms that learn from individual transitions step by
+          step (like DQN's replay buffer sampling), REINFORCE waits: it
+          rolls the current policy all the way out, sampling an action from
+          the network's output distribution on every step, until the
+          episode terminates or hits the step cap. Only then does it have a
+          complete <span id="gloss-trajectory-1"></span> &mdash; the full
+          sequence of states, actions, and rewards &mdash; to learn from.
+        </p>
+        <h3>2. Compute discounted returns</h3>
+        <p>
+          For every step in that trajectory, REINFORCE computes the
+          <span id="gloss-discounted-return-1"></span>: the sum of rewards
+          from that step onward, with rewards further in the future counted
+          for less (scaled down by the <span id="gloss-discount-factor-1"></span>
+          repeatedly). A step near the start of a long, successful episode
+          ends up with a high return; a step right before the pole falls
+          gets a low one.
+        </p>
+        <h3>3. Push the policy gradient</h3>
+        <p>
+          Each action's log-probability is then nudged up or down in
+          proportion to that step's return &mdash; actions that preceded
+          good outcomes get reinforced, actions that preceded bad ones get
+          suppressed. This is the <span id="gloss-policy-gradient-1"></span>
+          update. There is no value network anywhere in this process &mdash;
+          that's deliberate, not an oversight: REINFORCE has nothing playing
+          the role of a <span id="gloss-baseline-1"></span> or critic, so the
+          raw return itself is the entire learning signal.
+        </p>
       </section>
 
       <section class="content-section tradeoffs-section" aria-labelledby="tradeoffs-heading">
@@ -340,6 +354,8 @@
 
   <script type="module">
     import { loadCheckpoint, predict } from "../shared/inference.js";
+    import { createStepper } from "../shared/flow-stepper.js";
+    import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
 
     // ------------------------------------------------------------------
     // Gym CartPole-v1 physics constants (classic control cartpole.py)
@@ -584,6 +600,10 @@
         episodeCount = 1;
         render();
         updateStats();
+        if (cartpoleStepper) {
+          cartpoleStepper.stepTo(cartpoleStageIndex);
+          setTimeout(() => initGlossary(), 0);
+        }
       } catch (err) {
         badge.textContent = "error";
         badge.classList.add("error");
@@ -697,11 +717,176 @@
       });
     }
 
+    // ------------------------------------------------------------------
+    // Live decision stepper: walks through State -> Policy network ->
+    // Sample action -> Action, reading the current `checkpoint`/`state`
+    // closures above at render time so it always reflects the live
+    // rollout and whichever checkpoint is currently selected.
+    // ------------------------------------------------------------------
+    addTerms({
+      "policy-based":
+        "A reinforcement learning approach where the network directly outputs a policy (a probability distribution over actions) rather than value estimates that an action is chosen from indirectly.",
+      "stochastic policy":
+        "A policy that outputs a probability distribution over actions and samples from it, rather than deterministically picking one action, so the same state can lead to different actions on different visits.",
+      "exploration":
+        "Trying actions other than the current best guess so the agent can discover better behavior, instead of always exploiting what it already believes is optimal.",
+    });
+
+    // Shared between the sample-action and action stages so the action
+    // shown on the final stage matches the one actually sampled, instead
+    // of re-sampling (and possibly disagreeing).
+    let lastSampledAction = null;
+
+    function stateStage(el) {
+      const [x, xDot, theta, thetaDot] = state;
+      const deg = (theta * 180) / Math.PI;
+      el.innerHTML = `
+        <h3>State</h3>
+        <div class="flow-stepper-chips">
+          <div class="flow-stepper-chip"><span class="flow-stepper-chip-label">cart_position</span>${x.toFixed(3)}</div>
+          <div class="flow-stepper-chip"><span class="flow-stepper-chip-label">cart_velocity</span>${xDot.toFixed(3)}</div>
+          <div class="flow-stepper-chip"><span class="flow-stepper-chip-label">pole_angle</span>${theta.toFixed(3)} rad (${deg.toFixed(1)}&deg;)</div>
+          <div class="flow-stepper-chip"><span class="flow-stepper-chip-label">pole_angular_velocity</span>${thetaDot.toFixed(3)}</div>
+        </div>
+        <p>
+          These four numbers are the entire ${glossaryTerm("state space", "observation")}
+          the policy network sees on this step, taken directly from the live
+          rollout above: <code>cart_position</code> is where the cart sits on
+          the track, <code>cart_velocity</code> is how fast and which way
+          it's moving, <code>pole_angle</code> is how far the pole has
+          tipped from vertical upright, and <code>pole_angular_velocity</code>
+          is how fast that tilt is changing. Nothing else &mdash; no image,
+          no memory of earlier steps.
+        </p>
+      `;
+    }
+
+    function policyStage(el) {
+      if (!checkpoint) {
+        el.innerHTML = `<h3>Policy network</h3><p>Loading checkpoint&hellip;</p>`;
+        return;
+      }
+      const probs = predict(checkpoint, state);
+      const left = probs[0] ?? 0;
+      const right = probs[1] ?? 0;
+      const winnerLeft = left >= right;
+      el.innerHTML = `
+        <h3>Policy network</h3>
+        <div class="flow-stepper-bars">
+          <div class="flow-stepper-bar-col">
+            <div class="flow-stepper-bar-value">${(left * 100).toFixed(1)}%</div>
+            <div class="flow-stepper-bar ${winnerLeft ? "winner" : ""}" style="height: ${Math.max(left * 100, 1)}%"></div>
+            <div class="flow-stepper-bar-label">Push left</div>
+          </div>
+          <div class="flow-stepper-bar-col">
+            <div class="flow-stepper-bar-value">${(right * 100).toFixed(1)}%</div>
+            <div class="flow-stepper-bar ${!winnerLeft ? "winner" : ""}" style="height: ${Math.max(right * 100, 1)}%"></div>
+            <div class="flow-stepper-bar-label">Push right</div>
+          </div>
+        </div>
+        <p>
+          This network is ${glossaryTerm("policy-based", "policy-based")}:
+          unlike the Q-network on the <a href="../snake/index.html">Snake/DQN
+          page</a>, which outputs one Q-value score per action and picks
+          whichever scores highest, this network outputs a
+          ${glossaryTerm("policy", "probability distribution")} over the two
+          actions directly &mdash; the two bars above always sum to 100%.
+        </p>
+      `;
+    }
+
+    function sampleStage(el) {
+      if (!checkpoint) {
+        el.innerHTML = `<h3>Sample action</h3><p>Loading checkpoint&hellip;</p>`;
+        return;
+      }
+      const probs = predict(checkpoint, state);
+      let resampleCount = 0;
+
+      function draw(action) {
+        lastSampledAction = action;
+        const label = action === 1 ? "Push right" : "Push left";
+        el.innerHTML = `
+          <h3>Sample action</h3>
+          <div class="flow-stepper-callout">
+            Sampled action: <strong>${label}</strong>
+            ${resampleCount > 0 ? `<br /><span style="opacity:0.75;">resampled ${resampleCount} time${resampleCount === 1 ? "" : "s"}</span>` : ""}
+          </div>
+          <p><button type="button" id="cartpole-resample-btn">Resample</button></p>
+          <p>
+            REINFORCE draws its action from this
+            ${glossaryTerm("stochastic policy", "stochastic policy")} &mdash;
+            a genuine weighted random draw over the [${(probs[0] * 100).toFixed(1)}%, ${(probs[1] * 100).toFixed(1)}%]
+            distribution above &mdash; rather than always taking the
+            highest-probability action the way DQN's argmax does. Click
+            "Resample" to draw again from that exact same distribution; the
+            outcome can change from click to click purely from randomness.
+            That built-in ${glossaryTerm("exploration", "exploration")} is
+            what lets the policy keep discovering better behavior during
+            training instead of getting stuck repeating its first guess.
+          </p>
+        `;
+        const btn = document.getElementById("cartpole-resample-btn");
+        btn.addEventListener("click", () => {
+          resampleCount += 1;
+          draw(sampleAction(probs));
+          initGlossary();
+        });
+      }
+
+      draw(sampleAction(probs));
+    }
+
+    function actionStage(el) {
+      if (lastSampledAction === null && !checkpoint) {
+        el.innerHTML = `<h3>Action</h3><p>Loading checkpoint&hellip;</p>`;
+        return;
+      }
+      const action = lastSampledAction !== null ? lastSampledAction : sampleAction(predict(checkpoint, state));
+      const label = action === 1 ? "Push right" : "Push left";
+      el.innerHTML = `
+        <h3>Action</h3>
+        <div class="flow-stepper-callout">Applied to the environment: <strong>${label}</strong></div>
+        <p>
+          That single action moves the cart one physics step forward. But
+          unlike DQN, which stores this one transition in a
+          ${glossaryTerm("replay buffer")} and can learn from it right away,
+          REINFORCE doesn't learn anything from this step in isolation. It
+          keeps sampling and applying actions like this one, step after
+          step, until the whole episode ends &mdash; only then does it look
+          back at the entire trajectory and update the policy. See "How this
+          checkpoint was trained" below for that part.
+        </p>
+      `;
+    }
+
+    const cartpoleStepper = createStepper("cartpole-stepper", [
+      { key: "state", label: "State", render: stateStage },
+      { key: "policy", label: "Policy network", render: policyStage },
+      { key: "sample", label: "Sample action", render: sampleStage },
+      { key: "action", label: "Action", render: actionStage },
+    ]);
+
+    // Track which stage is active so a checkpoint change (slider input) can
+    // re-render it with fresh numbers, matching the flow-stepper's own
+    // Step/Reset button behavior.
+    let cartpoleStageIndex = 0;
+    const cartpoleStepperEl = document.getElementById("cartpole-stepper");
+    cartpoleStepperEl.addEventListener("click", (event) => {
+      if (event.target.closest("[data-flow-stepper-next]")) {
+        cartpoleStageIndex = Math.min(cartpoleStageIndex + 1, 3);
+      } else if (event.target.closest("[data-flow-stepper-reset]")) {
+        cartpoleStageIndex = 0;
+      }
+      setTimeout(() => initGlossary(), 0);
+    });
+
+    initGlossary();
+
     init();
   </script>
 
   <script type="module">
-    import { renderDiagram } from "../shared/rl-diagrams.js";
     import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
 
     // Page-specific terms not already in the shared glossary map.
@@ -712,9 +897,9 @@
         "One full run of the environment from reset to termination (or the step cap), made up of a sequence of state/action/reward steps.",
       "policy gradient":
         "The gradient of expected return with respect to the policy's parameters; REINFORCE estimates it directly from sampled trajectories and their returns.",
+      "discounted return":
+        "The return computed by summing rewards from a given step onward, scaling each future reward down by the discount factor raised to the number of steps away it is — so nearer rewards count for more than distant ones.",
     });
-
-    renderDiagram("reinforce-diagram", "reinforce");
 
     document.getElementById("gloss-cartpole-v1").outerHTML = glossaryTerm("CartPole-v1");
     document.getElementById("gloss-state-space").outerHTML = glossaryTerm("state space");
@@ -722,9 +907,11 @@
     document.getElementById("gloss-reward-function").outerHTML = glossaryTerm("reward function");
     document.getElementById("gloss-episode").outerHTML = glossaryTerm("episode");
 
-    document.getElementById("gloss-baseline-1").outerHTML = glossaryTerm("baseline");
     document.getElementById("gloss-trajectory-1").outerHTML = glossaryTerm("trajectory");
-    document.getElementById("gloss-return-1").outerHTML = glossaryTerm("return");
+    document.getElementById("gloss-discounted-return-1").outerHTML = glossaryTerm("discounted return");
+    document.getElementById("gloss-discount-factor-1").outerHTML = glossaryTerm("discount factor");
+    document.getElementById("gloss-policy-gradient-1").outerHTML = glossaryTerm("policy gradient");
+    document.getElementById("gloss-baseline-1").outerHTML = glossaryTerm("baseline");
 
     document.getElementById("gloss-policy-1").outerHTML = glossaryTerm("policy");
     document.getElementById("gloss-return-2").outerHTML = glossaryTerm("return");
