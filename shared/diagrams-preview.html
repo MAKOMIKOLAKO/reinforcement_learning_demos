@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>RL Diagram Library — Preview</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 780px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1e1b4b;
+    background: #ffffff;
+  }
+  h1 { font-size: 1.4rem; }
+  section {
+    margin-bottom: 2.5rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1rem;
+  }
+  h2 { font-size: 1.1rem; margin-top: 0; }
+  p.note { color: #6b7280; font-size: 0.9rem; }
+  .rl-diagram { width: 100%; height: auto; display: block; background: #fafafa; border-radius: 6px; }
+
+  .glossary-term-wrap { position: relative; display: inline-block; }
+  .glossary-term {
+    font: inherit;
+    color: #4338ca;
+    background: none;
+    border: none;
+    border-bottom: 1px dashed #4338ca;
+    cursor: pointer;
+    padding: 0;
+  }
+  .glossary-term:focus-visible { outline: 2px solid #4338ca; outline-offset: 2px; }
+  .glossary-tooltip {
+    position: absolute;
+    bottom: 125%;
+    left: 0;
+    z-index: 10;
+    width: max-content;
+    max-width: 260px;
+    background: #1e1b4b;
+    color: #fff;
+    font-size: 0.85rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 6px;
+    line-height: 1.4;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #0b0b12; color: #e5e7eb; }
+    section { border-color: #2a2a35; }
+    .rl-diagram { background: #14141c; }
+    p.note { color: #9ca3af; }
+  }
+</style>
+</head>
+<body>
+  <h1>RL Diagram Library — Preview</h1>
+  <p class="note">
+    Renders all four shared/rl-diagrams.js diagrams on one page so a reviewer
+    can visually confirm the DQN, REINFORCE, and PPO diagrams are structurally
+    distinct — not the same shape with different labels. Also demos
+    shared/glossary.js — try clicking, tabbing to, or pressing Escape on the
+    underlined terms below.
+  </p>
+
+  <section>
+    <h2>1. Base agent-environment loop</h2>
+    <div id="loop-diagram"></div>
+  </section>
+
+  <section>
+    <h2>2. DQN (value-based)</h2>
+    <p class="note">One <span id="dqn-glossary-1"></span>-network plus a dashed <span id="dqn-glossary-2"></span> shadow copy. No separate policy box.</p>
+    <div id="dqn-diagram"></div>
+  </section>
+
+  <section>
+    <h2>3. REINFORCE (policy-based)</h2>
+    <p class="note">Whole-episode <span id="reinforce-glossary-1"></span> collected before any update; <span id="reinforce-glossary-2"></span> computed after the fact. No value network anywhere.</p>
+    <div id="reinforce-diagram"></div>
+  </section>
+
+  <section>
+    <h2>4. PPO (actor-critic)</h2>
+    <p class="note">Two parallel networks; <span id="ppo-glossary-1"></span> mediates the actor update via the <span id="ppo-glossary-2"></span>.</p>
+    <div id="ppo-diagram"></div>
+  </section>
+
+  <script type="module">
+    import {
+      renderAgentEnvLoop,
+      renderDQNDiagram,
+      renderREINFORCEDiagram,
+      renderPPODiagram,
+      mountDiagram,
+    } from "./rl-diagrams.js";
+    import { glossaryTerm, initGlossary } from "./glossary.js";
+
+    mountDiagram(document.getElementById("loop-diagram"), renderAgentEnvLoop());
+
+    mountDiagram(
+      document.getElementById("dqn-diagram"),
+      renderDQNDiagram({ stateDim: 11, actions: ["up", "down", "left", "right"] })
+    );
+
+    mountDiagram(
+      document.getElementById("reinforce-diagram"),
+      renderREINFORCEDiagram({ stateDim: 4, actions: ["left", "right"], episodeSteps: 4 })
+    );
+
+    mountDiagram(
+      document.getElementById("ppo-diagram"),
+      renderPPODiagram({ stateDim: 3, actions: ["torque-"] })
+    );
+
+    document.getElementById("dqn-glossary-1").outerHTML = glossaryTerm("target network", "Q");
+    document.getElementById("dqn-glossary-2").outerHTML = glossaryTerm("target network");
+    document.getElementById("reinforce-glossary-1").outerHTML = glossaryTerm("trajectory");
+    document.getElementById("reinforce-glossary-2").outerHTML = glossaryTerm("return");
+    document.getElementById("ppo-glossary-1").outerHTML = glossaryTerm("advantage");
+    document.getElementById("ppo-glossary-2").outerHTML = glossaryTerm("clipped surrogate objective", "clipped objective");
+
+    initGlossary();
+  </script>
+</body>
+</html>
