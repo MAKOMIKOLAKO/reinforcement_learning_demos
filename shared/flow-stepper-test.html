@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>flow-stepper manual test</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  .page { max-width: 720px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>flow-stepper manual test</h1>
+  <p class="diagram-caption">
+    Throwaway test page for shared/flow-stepper.js. Not linked from the site.
+    Click "Step" repeatedly to walk through 4 dummy stages exercising bar
+    charts, chips, a callout, and a glossary tooltip. Click "Reset" to jump
+    back to stage 1. The dot on the track should animate smoothly (~0.4-0.5s)
+    between stage positions.
+  </p>
+
+  <div id="my-stepper"></div>
+</div>
+
+<script type="module">
+  import { createStepper } from './flow-stepper.js';
+  import { glossaryTerm, addTerms, initGlossary } from './glossary.js';
+
+  addTerms({
+    'flow stepper': 'A demo-only term added to exercise the glossary tooltip in this test page.',
+  });
+
+  function barsStage(el) {
+    el.innerHTML = `
+      <h3>Q-values</h3>
+      <div class="flow-stepper-bars">
+        ${[
+          ['Up', 0.2],
+          ['Down', 0.9],
+          ['Left', 0.4],
+          ['Right', 0.1],
+        ]
+          .map(([label, v], i, arr) => {
+            const max = Math.max(...arr.map((x) => x[1]));
+            const winner = v === max;
+            return `
+              <div class="flow-stepper-bar-col">
+                <div class="flow-stepper-bar-value">${v.toFixed(2)}</div>
+                <div class="flow-stepper-bar ${winner ? 'winner' : ''}" style="height: ${v * 100}%"></div>
+                <div class="flow-stepper-bar-label">${label}</div>
+              </div>
+            `;
+          })
+          .join('')}
+      </div>
+      <div class="flow-stepper-callout">Selected action: <strong>Down</strong> (highest Q-value)</div>
+      <p>The network outputs one ${glossaryTerm('Q-value')} per action; the agent picks the action with the highest value.</p>
+    `;
+  }
+
+  function chipsStage(el) {
+    el.innerHTML = `
+      <h3>State vector</h3>
+      <div class="flow-stepper-chips">
+        ${['head_x', 'head_y', 'food_x', 'food_y', 'dir']
+          .map((label, i) => `
+            <div class="flow-stepper-chip">
+              <span class="flow-stepper-chip-label">${label}</span>
+              ${(i * 3 + 1) % 9}
+            </div>
+          `)
+          .join('')}
+      </div>
+      <p>The raw ${glossaryTerm('state space', 'state')} is flattened into a fixed-length vector before being fed to the network.</p>
+    `;
+  }
+
+  function asyncStage(el) {
+    el.innerHTML = `<h3>Loading...</h3><p>Simulating an async inference call.</p>`;
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        el.innerHTML = `
+          <h3>Inference (async)</h3>
+          <div class="flow-stepper-callout">Async render() completed after a simulated delay.</div>
+          <p>render() may be <code>async</code> — the stepper awaits it before considering the stage settled.
+          This is where a real stage would call into <code>shared/inference.js</code>'s
+          ${glossaryTerm('flow stepper', 'predict()')} against a checkpoint.</p>
+        `;
+        resolve();
+      }, 300);
+    });
+  }
+
+  function summaryStage(el) {
+    el.innerHTML = `
+      <h3>Summary</h3>
+      <p>This final stage demonstrates plain prose with no visualization, and a second
+      glossary term: ${glossaryTerm('policy')}.</p>
+    `;
+  }
+
+  const stepper = createStepper('my-stepper', [
+    { key: 'qvalues', label: 'Q-values', render: barsStage },
+    { key: 'state', label: 'State', render: chipsStage },
+    { key: 'async', label: 'Async', render: asyncStage },
+    { key: 'summary', label: 'Summary', render: summaryStage },
+  ]);
+
+  initGlossary();
+  // Re-init glossary after each render since render() replaces panel innerHTML.
+  document.getElementById('my-stepper').addEventListener('click', () => {
+    setTimeout(() => initGlossary(), 0);
+  });
+</script>
+</body>
+</html>
