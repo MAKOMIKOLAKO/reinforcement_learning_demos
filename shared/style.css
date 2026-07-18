@@ -397,6 +397,134 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text);
 }
 
+/* --------------------------------------------------------------------------
+   Explainer content sections: environment spec, diagrams, algorithm notes
+   -------------------------------------------------------------------------- */
+
+.content-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  margin: 1.75rem 0;
+}
+
+.content-section h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+}
+
+.content-section h3 {
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.content-section p {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.env-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.env-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 1rem;
+}
+
+.env-card h3 {
+  margin-top: 0;
+}
+
+.env-card ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.env-card li {
+  margin-bottom: 0.35rem;
+}
+
+.env-card li code {
+  color: var(--text);
+}
+
+.diagram-frame {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.rl-diagram {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.diagram-caption {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Glossary tooltip terms */
+.glossary-term-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.glossary-term {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.glossary-term:hover,
+.glossary-term:focus-visible {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
+.glossary-term:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.glossary-missing {
+  text-decoration: underline dotted;
+}
+
+.glossary-tooltip {
+  position: absolute;
+  bottom: 125%;
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: 260px;
+  background: var(--text);
+  color: var(--bg-elevated);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+
 /* Generic status badge, e.g. "training…" / "loaded" */
 .badge {
   display: inline-block;
