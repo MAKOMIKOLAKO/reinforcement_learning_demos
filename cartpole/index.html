@@ -701,7 +701,7 @@
   </script>
 
   <script type="module">
-    import { renderREINFORCEDiagram, mountDiagram } from "../shared/rl-diagrams.js";
+    import { renderDiagram } from "../shared/rl-diagrams.js";
     import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
 
     // Page-specific terms not already in the shared glossary map.
@@ -714,10 +714,7 @@
         "The gradient of expected return with respect to the policy's parameters; REINFORCE estimates it directly from sampled trajectories and their returns.",
     });
 
-    mountDiagram(
-      document.getElementById("reinforce-diagram"),
-      renderREINFORCEDiagram({ stateDim: 4, actions: ["push left", "push right"], episodeSteps: 4 })
-    );
+    renderDiagram("reinforce-diagram", "reinforce");
 
     document.getElementById("gloss-cartpole-v1").outerHTML = glossaryTerm("CartPole-v1");
     document.getElementById("gloss-state-space").outerHTML = glossaryTerm("state space");

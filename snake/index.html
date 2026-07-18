@@ -157,7 +157,7 @@
   <script type="module" src="./main.js"></script>
 
   <script type="module">
-    import { renderDQNDiagram, mountDiagram } from "../shared/rl-diagrams.js";
+    import { renderDiagram } from "../shared/rl-diagrams.js";
     import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
 
     // Snake/DQN-specific term not already in the shared glossary.
@@ -199,10 +199,7 @@
       `;
 
       // --- DQN diagram (diagram-section) --------------------------------------
-      mountDiagram(
-        document.getElementById("dqn-diagram"),
-        renderDQNDiagram({ stateDim: 11, actions: ["up", "down", "left", "right"] })
-      );
+      renderDiagram("dqn-diagram", "dqn");
       document.getElementById("dqn-diagram-caption").innerHTML = `
         The 11 state values feed a single Q-network, which outputs 4
         ${glossaryTerm("Q-value", "Q-values")} &mdash; one per action

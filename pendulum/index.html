@@ -233,7 +233,7 @@
   </div>
 
   <script type="module">
-    import { renderPPODiagram, mountDiagram } from "../shared/rl-diagrams.js";
+    import { renderDiagram } from "../shared/rl-diagrams.js";
     import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
 
     // Pendulum-specific terms not already in the shared glossary map.
@@ -244,10 +244,7 @@
         "An action space where the agent outputs a real number (or a distribution over real numbers) rather than choosing from a fixed, finite list of discrete actions.",
     });
 
-    mountDiagram(
-      document.getElementById("ppo-diagram"),
-      renderPPODiagram({ stateDim: 3, actions: ["torque"] })
-    );
+    renderDiagram("ppo-diagram", "ppo");
 
     document.getElementById("gloss-state-space").outerHTML =
       glossaryTerm("state space", "state encoding");
