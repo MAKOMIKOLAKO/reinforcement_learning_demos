@@ -26,6 +26,57 @@
         training, from random flailing to confident food-seeking.
       </p>
 
+      <section class="content-section" id="env-section">
+        <h2>Environment</h2>
+        <p>
+          Before looking at the network, it helps to pin down exactly what
+          the agent sees, what it can do, and what it's rewarded for. The
+          descriptions below are precise enough to reimplement the state
+          encoding from scratch.
+        </p>
+        <div class="env-grid">
+          <div class="env-card">
+            <h3>State space</h3>
+            <p>
+              The network receives an 11-dimensional vector,
+              <code>[danger_straight, danger_right, danger_left,
+              moving_left, moving_right, moving_up, moving_down,
+              food_left, food_right, food_up, food_down]</code>,
+              recomputed fresh every step:
+            </p>
+            <ul id="state-space-list"></ul>
+          </div>
+          <div class="env-card">
+            <h3>Action space</h3>
+            <p>4 discrete actions, one per absolute compass direction:</p>
+            <ul>
+              <li><code>up</code> &mdash; move one cell up</li>
+              <li><code>down</code> &mdash; move one cell down</li>
+              <li><code>left</code> &mdash; move one cell left</li>
+              <li><code>right</code> &mdash; move one cell right</li>
+            </ul>
+            <p>
+              These are absolute directions, not relative turns &mdash;
+              picking the action opposite the snake's current heading is a
+              legal (if usually fatal) move, same as any other.
+            </p>
+          </div>
+          <div class="env-card">
+            <h3>Reward function</h3>
+            <ul>
+              <li><code>+10</code> for eating food</li>
+              <li><code>-10</code> for dying (hitting a wall or its own body)</li>
+              <li><code>-0.01</code> per step otherwise</li>
+            </ul>
+            <p>
+              The small per-step penalty discourages stalling &mdash; without
+              it, an agent that's unsure what to do could circle forever at
+              zero cost.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <div class="demo-layout">
         <div class="stage">
           <canvas id="board" width="400" height="400" aria-label="Snake game board"></canvas>
@@ -77,6 +128,25 @@
           </p>
         </div>
       </div>
+
+      <section class="content-section" id="diagram-section">
+        <h2>How data flows through the network</h2>
+        <p>
+          The diagram below traces one forward pass: the 11-dimensional
+          state goes in, the Q-network outputs one score per action, and
+          <code>argmax</code> picks the move. It also shows the parts of DQN
+          that only matter during training &mdash; the replay buffer and
+          target network &mdash; which this page doesn't exercise live since
+          it only replays pretrained checkpoints.
+        </p>
+        <div class="diagram-frame" id="dqn-diagram"></div>
+        <p class="diagram-caption" id="dqn-diagram-caption"></p>
+      </section>
+
+      <section class="content-section" id="tradeoffs-section">
+        <h2>Why DQN, and its tradeoffs</h2>
+        <div id="tradeoffs-content"></div>
+      </section>
     </main>
 
     <footer class="site-footer">
@@ -85,5 +155,125 @@
   </div>
 
   <script type="module" src="./main.js"></script>
+
+  <script type="module">
+    import { renderDQNDiagram, mountDiagram } from "../shared/rl-diagrams.js";
+    import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
+
+    // Snake/DQN-specific term not already in the shared glossary.
+    addTerms({
+      "danger flag":
+        "A 0/1 input feature meaning 'moving this direction next would immediately kill the snake' (wall or its own body one cell away) — not a prediction, just a lookahead check baked into the state.",
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // --- State space bullets (env-section) ---------------------------------
+      const stateSpaceList = document.getElementById("state-space-list");
+      stateSpaceList.innerHTML = `
+        <li>
+          <code>danger_straight</code>, <code>danger_right</code>,
+          <code>danger_left</code> &mdash; three ${glossaryTerm("danger flag", "danger flags")},
+          each 0 or 1. They ask: if the snake moved one cell in the direction
+          straight ahead / one turn clockwise from straight ahead / one turn
+          counter-clockwise from straight ahead (all relative to its
+          <em>current heading</em>, not the compass), would that cell be a
+          wall or occupied by the snake's own body? 1 means yes.
+        </li>
+        <li>
+          <code>moving_left</code>, <code>moving_right</code>,
+          <code>moving_up</code>, <code>moving_down</code> &mdash; a one-hot
+          encoding of the snake's current heading in absolute compass
+          directions. Exactly one of these four is 1 (the current direction
+          of travel) and the other three are 0.
+        </li>
+        <li>
+          <code>food_left</code>, <code>food_right</code>, <code>food_up</code>,
+          <code>food_down</code> &mdash; 0/1 flags comparing the food's
+          absolute grid position to the head's. <code>food_left</code> is 1
+          if the food's x-coordinate is less than the head's x-coordinate
+          (independent of which way the snake is currently facing), and
+          likewise for the other three. More than one can be 1 at once (e.g.
+          food up-and-left of the head sets both <code>food_left</code> and
+          <code>food_up</code>).
+        </li>
+      `;
+
+      // --- DQN diagram (diagram-section) --------------------------------------
+      mountDiagram(
+        document.getElementById("dqn-diagram"),
+        renderDQNDiagram({ stateDim: 11, actions: ["up", "down", "left", "right"] })
+      );
+      document.getElementById("dqn-diagram-caption").innerHTML = `
+        The 11 state values feed a single Q-network, which outputs 4
+        ${glossaryTerm("Q-value", "Q-values")} &mdash; one per action
+        (up/down/left/right). <code>argmax</code> over those 4 numbers picks
+        the move actually taken; there is no separate policy network to
+        consult. The dashed boxes (${glossaryTerm("replay buffer")} and
+        ${glossaryTerm("target network")}) are how the network was trained
+        offline &mdash; they don't run on this page, which only replays the
+        forward-pass half of the diagram against a frozen checkpoint.
+      `;
+
+      // --- Why DQN, and its tradeoffs (tradeoffs-section) ---------------------
+      document.getElementById("tradeoffs-content").innerHTML = `
+        <p>
+          DQN is <strong>value-based</strong>: it learns
+          ${glossaryTerm("Q-value", "Q(s, a)")}, the expected future reward
+          of taking action <code>a</code> in state <code>s</code> and acting
+          well afterward, for every action in the ${glossaryTerm("action space")}.
+          There is no separate policy network to learn a distribution over
+          actions &mdash; the policy is entirely implicit. Acting greedily
+          just means taking the <code>argmax</code> action; during training
+          the agent instead follows an ${glossaryTerm("epsilon-greedy")}
+          schedule so it keeps exploring instead of locking onto whatever
+          looks best early on.
+        </p>
+        <p>
+          Two pieces of machinery make that value estimate learnable at all,
+          even though neither is visible on this page (which only replays
+          pretrained checkpoints, not live training):
+        </p>
+        <ul>
+          <li>
+            <strong>${glossaryTerm("replay buffer")}</strong> &mdash; during
+            training, every (state, action, reward, next state) transition is
+            stored in a large buffer instead of being used once and
+            discarded. Each training step samples a random batch from that
+            history. This breaks the strong correlation between
+            back-to-back Snake steps (which look almost identical frame to
+            frame) and lets the network reuse old experience many times,
+            which is also what makes DQN ${glossaryTerm("off-policy")} &mdash;
+            it can learn from transitions gathered under an older, worse
+            version of itself.
+          </li>
+          <li>
+            <strong>${glossaryTerm("target network")}</strong> &mdash; the
+            training target for a Q-update is itself a Q-value prediction
+            (of the next state). If the same fast-changing network produced
+            both the prediction and its own target, training would chase a
+            constantly shifting goal and tend to destabilize. Freezing a
+            periodically-copied duplicate of the network as the source of
+            targets gives the training signal something stable to aim at for
+            a while between copies.
+          </li>
+        </ul>
+        <p>
+          DQN's most important limitation is baked into that
+          <code>argmax</code> step: it only works when the action space is
+          discrete and small enough to enumerate and score every option, as
+          it is here (4 moves). It has no way to output a continuous action
+          like "apply &minus;0.73 units of torque" &mdash; there's no
+          argmax over an infinite continuum of real numbers. That's exactly
+          the situation the
+          <a href="../pendulum/index.html">Pendulum demo</a> is in, which is
+          why it uses PPO (an actor-critic method that outputs a continuous
+          action directly) instead of DQN. Worth comparing the two pages
+          side by side to see how the network outputs differ.
+        </p>
+      `;
+
+      initGlossary();
+    });
+  </script>
 </body>
 </html>
