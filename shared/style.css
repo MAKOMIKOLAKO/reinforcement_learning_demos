@@ -412,3 +412,147 @@ input[type="range"]::-moz-range-thumb {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
 }
+
+/* --------------------------------------------------------------------------
+   Environment / concept sections (state space, action space, reward, etc.)
+   -------------------------------------------------------------------------- */
+
+.env-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.env-section h2 {
+  margin-top: 0;
+}
+
+.env-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.env-card {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  padding: 0.9rem 1rem;
+  background: var(--bg);
+}
+
+.env-card h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.env-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.env-card p + p {
+  margin-top: 0.5rem;
+}
+
+.callout {
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: 0 6px 6px 0;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------------------
+   Diagram container (shared/rl-diagrams.js SVG output)
+   -------------------------------------------------------------------------- */
+
+.diagram-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.diagram-section h2 {
+  margin-top: 0;
+}
+
+.diagram-container {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.rl-diagram {
+  width: 100%;
+  height: auto;
+  display: block;
+  min-width: 480px;
+}
+
+.diagram-caption {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Glossary term tooltips (shared/glossary.js)
+   -------------------------------------------------------------------------- */
+
+.glossary-term-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.glossary-term {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed var(--accent);
+  padding: 0;
+  cursor: pointer;
+}
+
+.glossary-term:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
+.glossary-term:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.glossary-missing {
+  text-decoration: underline wavy var(--danger);
+}
+
+.glossary-tooltip {
+  position: absolute;
+  bottom: 125%;
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: 280px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}

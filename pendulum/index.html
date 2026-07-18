@@ -26,6 +26,93 @@
         (random-torque) checkpoint against the fully trained policy.
       </p>
 
+      <section class="env-section" id="environment-section">
+        <h2>Environment</h2>
+        <p>
+          Pendulum-v1 is a continuous-control task: instead of choosing among
+          a handful of discrete moves, the agent outputs a real-valued
+          torque, and every reward it gets is a penalty that only ever pushes
+          toward zero. Here's the full picture, spelled out.
+        </p>
+        <div class="env-grid">
+          <div class="env-card">
+            <h3>State space</h3>
+            <p>
+              A 3-dimensional vector:
+              <code>[cos(&theta;), sin(&theta;), angular velocity]</code>,
+              where &theta; is the pendulum's angle away from upright.
+            </p>
+            <p>
+              The angle is encoded as its cosine and sine rather than as the
+              raw angle &theta; itself. A raw angle wraps discontinuously
+              from +&pi; to -&pi; as the pendulum swings through the bottom
+              &mdash; the same physical position would otherwise be
+              represented by two numbers at opposite ends of the range. The
+              cos/sin pair moves smoothly around the unit circle instead, so
+              nearby physical angles always map to nearby numbers, with no
+              seam for a <span id="gloss-state-space"></span> to trip over.
+            </p>
+          </div>
+          <div class="env-card">
+            <h3>Action space</h3>
+            <p>
+              Continuous, not discrete: a single torque value in
+              <code>[-2.0, 2.0]</code> N&middot;m. There's no menu of moves
+              to pick from &mdash; the
+              <span id="gloss-actor-critic-1"></span> outputs a real number
+              (or a distribution over real numbers) directly in that range,
+              which is a genuinely different shape of problem than Snake's
+              four discrete directions or CartPole's two-way push.
+            </p>
+          </div>
+          <div class="env-card">
+            <h3>Reward function</h3>
+            <p>
+              Exactly
+              <code>-(&theta;_norm&sup2; + 0.1&times;velocity&sup2; + 0.001&times;action&sup2;)</code>,
+              where <code>&theta;_norm</code> is the angle from upright
+              normalized to <code>[-&pi;, &pi;]</code>.
+            </p>
+            <p>
+              Every term in that sum is squared and negated, so
+              <strong>every single reward is negative or, at best, exactly
+              zero &mdash; never positive.</strong> There is no "good" reward
+              to chase, only a penalty to shrink. The
+              <span id="gloss-policy"></span> objective is to minimize the
+              magnitude of that penalty: get the angle near 0 (upright),
+              keep angular velocity low (stay still), and spend as little
+              torque as possible.
+            </p>
+          </div>
+        </div>
+        <p class="callout">
+          Worth noticing when comparing pages: Snake and CartPole are both
+          set up as positive-reward-seeking tasks (score points, survive
+          longer, both give reward you want more of). Pendulum flips that
+          framing &mdash; it's a pure penalty-minimization task where the
+          best possible episode still only ever accumulates non-positive
+          reward.
+        </p>
+      </section>
+
+      <section class="diagram-section" id="diagram-section">
+        <h2>How PPO processes a step</h2>
+        <div class="diagram-container" id="ppo-diagram"></div>
+        <p class="diagram-caption">
+          This diagram is visually busier than the REINFORCE diagram on the
+          CartPole page, and that's the point, not incidental complexity.
+          PPO runs two networks side by side &mdash; an
+          <span id="gloss-actor-critic-2"></span> that outputs the action
+          distribution, and a critic that outputs a
+          <span id="gloss-value-function"></span> estimate &mdash; and adds
+          two extra computed nodes REINFORCE doesn't have: the
+          <span id="gloss-advantage"></span> (return minus the critic's
+          baseline) and the <span id="gloss-clipped-objective"></span> that
+          actually updates the actor. Every one of those extra boxes exists
+          to buy training stability; none of it is decorative.
+        </p>
+      </section>
+
       <div class="demo-layout">
         <div class="stage">
           <canvas id="stage-canvas" width="480" height="480"></canvas>
@@ -93,6 +180,51 @@
           </p>
         </div>
       </div>
+
+      <section class="env-section" id="ppo-tradeoffs-section">
+        <h2>Why PPO, and its tradeoffs</h2>
+        <p>
+          REINFORCE (used on the CartPole page) updates its policy from raw
+          episode <span id="gloss-return"></span> alone &mdash; a noisy
+          signal, since the same action can look great or terrible purely
+          because of what randomly happened later in the episode. PPO adds
+          a <span id="gloss-baseline"></span>: the critic learns to predict
+          how good a state already is, and that prediction gets subtracted
+          from the observed return to compute an
+          <span id="gloss-advantage-2"></span>. Subtracting a
+          state-dependent baseline doesn't change what the optimal policy
+          is, but it does remove a large chunk of the variance from the
+          gradient signal &mdash; the policy update reacts to
+          "was this action better or worse than expected here," not to the
+          raw, noisy total.
+        </p>
+        <p>
+          The other piece is the
+          <span id="gloss-clipped-objective-2"></span>. In plain terms: it
+          caps how far a single update is allowed to shift the policy's
+          action probabilities. Without that cap, one unlucky batch of
+          rollout data could yank the policy sharply in the wrong
+          direction, and because training is
+          <span id="gloss-on-policy"></span> &mdash; the next batch of data
+          comes from whatever policy that bad update just produced &mdash;
+          a big enough mistake can spiral rather than get corrected. The
+          clip keeps each update small enough that a bad batch does limited
+          damage. It's worth actually comparing the two checkpoint sliders
+          side by side: this page's progression from flailing torque to a
+          held balance should look smoother and more consistent
+          checkpoint-to-checkpoint than CartPole's noisier REINFORCE
+          progression.
+        </p>
+        <p class="callout">
+          None of this is free. PPO trains two networks instead of one
+          (actor and critic), and needs extra machinery REINFORCE doesn't:
+          advantage estimation, a value-function loss for the critic, and a
+          clip-ratio hyperparameter to tune. That's meaningfully more
+          implementation complexity in exchange for the lower-variance,
+          more stable training you can see in the checkpoint progression
+          above.
+        </p>
+      </section>
     </main>
 
     <footer class="site-footer">
@@ -100,6 +232,44 @@
     </footer>
   </div>
 
+  <script type="module">
+    import { renderPPODiagram, mountDiagram } from "../shared/rl-diagrams.js";
+    import { glossaryTerm, addTerms, initGlossary } from "../shared/glossary.js";
+
+    // Pendulum-specific terms not already in the shared glossary map.
+    addTerms({
+      "actor-critic":
+        "An RL architecture with two learned networks working together: an actor that picks actions (the policy) and a critic that estimates state values, used by the critic to judge the actor's choices.",
+      "continuous action space":
+        "An action space where the agent outputs a real number (or a distribution over real numbers) rather than choosing from a fixed, finite list of discrete actions.",
+    });
+
+    mountDiagram(
+      document.getElementById("ppo-diagram"),
+      renderPPODiagram({ stateDim: 3, actions: ["torque"] })
+    );
+
+    document.getElementById("gloss-state-space").outerHTML =
+      glossaryTerm("state space", "state encoding");
+    document.getElementById("gloss-actor-critic-1").outerHTML =
+      glossaryTerm("actor-critic", "actor");
+    document.getElementById("gloss-policy").outerHTML = glossaryTerm("policy");
+    document.getElementById("gloss-actor-critic-2").outerHTML =
+      glossaryTerm("actor-critic", "actor");
+    document.getElementById("gloss-value-function").outerHTML =
+      glossaryTerm("value function");
+    document.getElementById("gloss-advantage").outerHTML = glossaryTerm("advantage");
+    document.getElementById("gloss-clipped-objective").outerHTML =
+      glossaryTerm("clipped surrogate objective", "clipped objective");
+    document.getElementById("gloss-return").outerHTML = glossaryTerm("return");
+    document.getElementById("gloss-baseline").outerHTML = glossaryTerm("baseline");
+    document.getElementById("gloss-advantage-2").outerHTML = glossaryTerm("advantage");
+    document.getElementById("gloss-clipped-objective-2").outerHTML =
+      glossaryTerm("clipped surrogate objective");
+    document.getElementById("gloss-on-policy").outerHTML = glossaryTerm("on-policy");
+
+    initGlossary();
+  </script>
   <script type="module" src="pendulum.js"></script>
 </body>
 </html>
